@@ -31,7 +31,8 @@ EXTRA_DIST = \
 noinst_PROGRAMS += unit_tests
 unit_tests_SOURCES = \
         unit/unit.cc \
-        unit/unit_test.cc
+        unit/unit_test.cc \
+        common/custom_debug_log.cc
 
 
 noinst_HEADERS = \
@@ -70,9 +71,9 @@ unit_tests_LDFLAGS = \
 
 
 unit_tests_CPPFLAGS = \
-	-std=c++11 \
 	-Icommon \
-	-I../ \
+	-I$(top_srcdir)/ \
+	-I$(top_srcdir)/others \
 	-g \
 	-I$(top_builddir)/headers \
 	$(CURL_CFLAGS) \
@@ -95,7 +96,7 @@ noinst_PROGRAMS += regression_tests
 regression_tests_SOURCES = \
         regression/regression.cc \
         regression/regression_test.cc \
-        regression/custom_debug_log.cc
+        common/custom_debug_log.cc
 
 regression_tests_LDADD = \
 	$(CURL_LDADD) \
@@ -126,9 +127,8 @@ regression_tests_LDFLAGS = \
 
 
 regression_tests_CPPFLAGS = \
-	-std=c++11 \
 	-Icommon \
-	-I../ \
+	-I$(top_srcdir) \
 	-g \
 	-I$(top_builddir)/headers \
 	$(CURL_CFLAGS) \
@@ -179,9 +179,8 @@ rules_optimization_LDFLAGS = \
 	$(YAJL_LDFLAGS)
 
 rules_optimization_CPPFLAGS = \
-	-std=c++11 \
 	-Icommon \
-	-I../ \
+	-I$(top_srcdir)/ \
 	-g \
 	-I$(top_builddir)/headers \
 	$(CURL_CFLAGS) \

@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -101,17 +101,29 @@ int RulesSet::load(const char *plainRules) {
 }
 
 
-std::string RulesSet::getParserError() {
+std::string RulesSet::getParserError() const {
     return this->m_parserError.str();
 }
 
+std::string RulesSet::getParserError() {
+    return static_cast<const RulesSet&>(*this).getParserError();
+}
+
+void RulesSet::cleanMatchedVars(Transaction *trans) {
+    ms_dbg_a(trans, 9, "Matched vars cleaned.");
+    // cppcheck-suppress ctunullpointer
+    trans->m_variableMatchedVar.unset();
+    trans->m_variableMatchedVars.unset();
+    trans->m_variableMatchedVarName.unset();
+    trans->m_variableMatchedVarsNames.unset();
+}
 
 int RulesSet::evaluate(int phase, Transaction *t) {
     if (phase >= modsecurity::Phases::NUMBER_OF_PHASES) {
        return 0;
     }
 
-    Rules *rules = m_rulesSetPhases[phase];
+    const Rules *rules = m_rulesSetPhases[phase];
 
     ms_dbg_a(t, 9, "This phase consists of " \
         + std::to_string(rules->size()) + " rule(s).");
@@ -162,7 +174,7 @@ int RulesSet::evaluate(int phase, Transaction *t) {
             }
             bool remove_rule = false;
             if (ruleWithActions && m_exceptions.m_remove_rule_by_msg.empty() == false) {
-                for (auto &z : m_exceptions.m_remove_rule_by_msg) {
+                for (const auto &z : m_exceptions.m_remove_rule_by_msg) {
                     if (ruleWithActions->containsMsg(z, t) == true) {
                         ms_dbg_a(t, 9, "Skipped rule id '" \
                             + ruleWithActions->getReference() \
@@ -177,7 +189,7 @@ int RulesSet::evaluate(int phase, Transaction *t) {
             }
 
             if (ruleWithActions && m_exceptions.m_remove_rule_by_tag.empty() == false) {
-                for (auto &z : m_exceptions.m_remove_rule_by_tag) {
+                for (const auto &z : m_exceptions.m_remove_rule_by_tag) {
                     if (ruleWithActions->containsTag(z, t) == true) {
                         ms_dbg_a(t, 9, "Skipped rule id '" \
                             + ruleWithActions->getReference() \
@@ -193,7 +205,7 @@ int RulesSet::evaluate(int phase, Transaction *t) {
 
 
             if (ruleWithActions) {
-                for (auto &z : t->m_ruleRemoveByTag) {
+                for (const auto &z : t->m_ruleRemoveByTag) {
                     if (ruleWithActions->containsTag(z, t) == true) {
                         ms_dbg_a(t, 9, "Skipped rule id '" \
                             + ruleWithActions->getReference() \
@@ -208,6 +220,7 @@ int RulesSet::evaluate(int phase, Transaction *t) {
             }
 
             rule->evaluate(t);
+            cleanMatchedVars(t);
             if (t->m_it.disruptive > 0) {
 
                 ms_dbg_a(t, 8, "Skipping this phase as this " \
@@ -266,7 +279,7 @@ extern "C" RulesSet *msc_create_rules_set(void) {
 }
 
 
-extern "C" void msc_rules_dump(RulesSet *rules) {
+extern "C" void msc_rules_dump(const RulesSet *rules) {
     rules->dump();
 }
 
@@ -308,6 +321,21 @@ extern "C" int msc_rules_add(RulesSet *rules, const char *plain_rules,
         *error = strdup(rules->getParserError().c_str());
     }
     return ret;
+}
+
+
+/**
+ * @name    msc_rules_error_cleanup
+ * @brief   Deallocates an error message buffer returned by a msc_rules_xxx function.
+ *
+ * This is a helper function to free the error message buffer allocated
+ * by a msc_rules_xxx function.
+ *
+ * @param error Error message pointer.
+ *
+ */
+extern "C" void msc_rules_error_cleanup(const char *error) {
+    free((void*) error);
 }
 
 

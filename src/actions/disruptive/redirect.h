@@ -37,17 +37,16 @@ namespace disruptive {
 class Redirect : public Action {
  public:
     explicit Redirect(const std::string &action)
-        : Action(action, RunTimeOnlyIfMatchKind),
+        : Action(action),
         m_status(0),
         m_string(nullptr) { }
 
     explicit Redirect(std::unique_ptr<RunTimeString> z)
-        : Action("redirert", RunTimeOnlyIfMatchKind),
+        : Action("redirert"),
             m_status(0),
             m_string(std::move(z)) { }
 
-    bool evaluate(RuleWithActions *rule, Transaction *transaction,
-        std::shared_ptr<RuleMessage> rm) override;
+    bool evaluate(RuleWithActions *rule, Transaction *transaction, RuleMessage &ruleMessage) override;
     bool init(std::string *error) override;
     bool isDisruptive() override { return true; }
 

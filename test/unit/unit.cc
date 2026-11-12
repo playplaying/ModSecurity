@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -15,7 +15,9 @@
 
 #include <string.h>
 #include <cstring>
-
+#include <cassert>
+#include <thread>
+#include <array>
 #include <iostream>
 #include <ctime>
 #include <string>
@@ -26,10 +28,13 @@
 #include "src/actions/transformations/transformation.h"
 #include "modsecurity/transaction.h"
 #include "modsecurity/actions/action.h"
+#include "src/actions/capture.h"
+#include "src/operators/libinjection_adapter.h"
 
 
 #include "test/common/modsecurity_test.h"
 #include "test/common/modsecurity_test_results.h"
+#include "test/common/modsecurity_test_context.h"
 #include "test/common/colors.h"
 #include "test/unit/unit_test.h"
 #include "src/utils/string.h"
@@ -38,6 +43,7 @@
 
 
 using modsecurity_test::UnitTest;
+using modsecurity_test::UnitTestResult;
 using modsecurity_test::ModSecurityTest;
 using modsecurity_test::ModSecurityTestResults;
 using modsecurity::actions::transformations::Transformation;
@@ -53,64 +59,221 @@ void print_help() {
 }
 
 
-void perform_unit_test(ModSecurityTest<UnitTest> *test, UnitTest *t,
-    ModSecurityTestResults<UnitTest>* res) {
-    std::string error;
+namespace {
+injection_result_t sqli_force_error(const char *, size_t, char *) {
+    return LIBINJECTION_RESULT_ERROR;
+}
+
+injection_result_t xss_force_error(const char *, size_t) {
+    return LIBINJECTION_RESULT_ERROR;
+}
+
+void configure_libinjection_override(const UnitTest &t) {
+    modsecurity::operators::clearLibinjectionOverridesForTesting();
+
+    if (t.libinjection_override != "error") {
+        return;
+    }
+
+    const std::string operator_name = modsecurity::utils::string::tolower(t.name);
+
+    if (operator_name == "detectsqli") {
+        modsecurity::operators::setLibinjectionSQLiOverrideForTesting(
+            sqli_force_error);
+    } else if (operator_name == "detectxss") {
+        modsecurity::operators::setLibinjectionXSSOverrideForTesting(
+            xss_force_error);
+    }
+}
+}  // namespace
+
+struct OperatorTest {
+    using ItemType = Operator;
+
+    static ItemType* init(const UnitTest &t) {
+        auto op = Operator::instantiate(t.name, t.param);
+        assert(op != nullptr);
+
+        std::string error;
+        op->init(t.filename, &error);
+
+        return op;
+    }
+
+    static UnitTestResult eval(ItemType &op, const UnitTest &t, modsecurity::Transaction &transaction) {
+        configure_libinjection_override(t);
+
+        std::unique_ptr<modsecurity::Actions> actions;
+        if (t.capture) {
+            actions = std::make_unique<modsecurity::Actions>();
+            actions->push_back(new modsecurity::actions::Capture("capture"));
+        }
+
+        modsecurity::RuleWithActions rule{actions.release(), nullptr, "dummy.conf", -1};
+        modsecurity::RuleMessage ruleMessage{rule, transaction};
+
+        const bool matched = op.evaluate(&transaction, &rule, t.input, ruleMessage);
+
+        UnitTestResult result;
+        result.ret = matched;
+        if (t.capture) {
+            auto tx0 = transaction.m_collections.m_tx_collection->resolveFirst("0");
+            if (tx0 != nullptr) {
+                result.output = *tx0;
+            }
+        }
+
+        modsecurity::operators::clearLibinjectionOverridesForTesting();
+        return result;
+    }
+
+    static bool check(const UnitTestResult &result, const UnitTest &t) {
+        if (result.ret != t.ret) {
+            return true;
+        }
+
+        if (t.capture || t.output.empty() == false) {
+            return result.output != t.output;
+        }
+
+        return false;
+    }
+};
+
+
+struct TransformationTest {
+    using ItemType = Transformation;
+
+    static ItemType* init(const UnitTest &t) {
+        auto tfn = Transformation::instantiate("t:" + t.name);
+        assert(tfn != nullptr);
+
+        return tfn;
+    }
+
+    static UnitTestResult eval(const ItemType &tfn, const UnitTest &t, const modsecurity::Transaction &transaction) {
+        auto ret = t.input;
+        tfn.transform(ret, &transaction);
+        return {1, ret};
+    }
+
+    static bool check(const UnitTestResult &result, const UnitTest &t) {
+        return result.output != t.output;
+    }
+};
+
+
+template<typename TestType>
+UnitTestResult perform_unit_test_once(const UnitTest &t, modsecurity::Transaction &transaction) { // cppcheck-suppress constParameterReference ; transaction can be const for transformations but not for operators
+    std::unique_ptr<typename TestType::ItemType> item(TestType::init(t));
+    assert(item.get() != nullptr);
+
+    return TestType::eval(*item.get(), t, transaction);
+}
+
+
+template<typename TestType>
+UnitTestResult perform_unit_test_multithreaded(const UnitTest &t,
+    modsecurity_test::ModSecurityTestContext &context) {
+    (void)context;
+
+    constexpr auto NUM_THREADS = 50;
+    constexpr auto ITERATIONS = 5'000;
+
+    std::array<std::thread, NUM_THREADS> threads;
+    std::array<UnitTestResult, NUM_THREADS> results;
+
+    std::unique_ptr<typename TestType::ItemType> item(TestType::init(t));
+    assert(item.get() != nullptr);
+
+    for (auto i = 0; i != threads.size(); ++i)
+    {
+        auto &result = results[i];
+        threads[i] = std::thread(
+            [&item, &t, &result]()
+            {
+                modsecurity_test::ModSecurityTestContext thread_context(
+                    "ModSecurity-unit mtstress-thread");
+                auto transaction = thread_context.create_transaction();
+                for (auto j = 0; j != ITERATIONS; ++j)
+                    result = TestType::eval(*item.get(), t, transaction);
+            });
+    }
+
+    UnitTestResult ret;
+
+    for (auto i = 0; i != threads.size(); ++i)
+    {
+        threads[i].join();
+        if (TestType::check(results[i], t))
+            ret = results[i];   // error value, keep iterating to join all threads
+        else if(i == 0)
+            ret = results[i];   // initial value
+    }
+
+    return ret; // cppcheck-suppress uninitvar ; false positive, ret assigned at least once in previous loop
+}
+
+
+template<typename TestType>
+void perform_unit_test_helper(const ModSecurityTest<UnitTest> &test, UnitTest &t,
+    ModSecurityTestResults<UnitTest> &res, modsecurity::Transaction &transaction,
+    modsecurity_test::ModSecurityTestContext &context) {
+
+    if (!test.m_test_multithreaded)
+        t.result = perform_unit_test_once<TestType>(t, transaction);
+    else
+        t.result = perform_unit_test_multithreaded<TestType>(t, context);
+
+    if (TestType::check(t.result, t)) {
+        res.push_back(&t);
+        if (test.m_automake_output) {
+            std::cout << "FAIL ";
+        }
+    } else if (test.m_automake_output) {
+        std::cout << "PASS ";
+    }
+}
+
+
+void perform_unit_test(const ModSecurityTest<UnitTest> &test, UnitTest &t,
+    ModSecurityTestResults<UnitTest> &res) {
     bool found = true;
 
-    if (test->m_automake_output) {
+    modsecurity_test::ModSecurityTestContext context("ModSecurity-unit v0.0.1-alpha"
+                                                        " (ModSecurity unit test utility)");
+
+    auto transaction = context.create_transaction();
+
+    if (test.m_automake_output) {
         std::cout << ":test-result: ";
     }
 
-    if (t->resource.empty() == false) {
-        found = (std::find(resources.begin(), resources.end(), t->resource)
-            != resources.end());
+    if (t.resource.empty() == false) {
+        found = std::find(resources.begin(), resources.end(), t.resource)
+            != resources.end();
     }
 
     if (!found) {
-        t->skipped = true;
-        res->push_back(t);
-        if (test->m_automake_output) {
+        t.skipped = true;
+        res.push_back(&t);
+        if (test.m_automake_output) {
             std::cout << "SKIP ";
         }
     }
 
-    if (t->type == "op") {
-        Operator *op = Operator::instantiate(t->name, t->param);
-        op->init(t->filename, &error);
-        int ret = op->evaluate(NULL, NULL, t->input, NULL);
-        t->obtained = ret;
-        if (ret != t->ret) {
-            res->push_back(t);
-            if (test->m_automake_output) {
-                std::cout << "FAIL ";
-            }
-        } else if (test->m_automake_output) {
-            std::cout << "PASS ";
-        }
-        delete op;
-    } else if (t->type == "tfn") {
-        Transformation *tfn = Transformation::instantiate("t:" + t->name);
-        std::string ret = tfn->evaluate(t->input, NULL);
-        t->obtained = 1;
-        t->obtainedOutput = ret;
-        if (ret != t->output) {
-            res->push_back(t);
-            if (test->m_automake_output) {
-                std::cout << "FAIL ";
-            }
-        } else if (test->m_automake_output) {
-            std::cout << "PASS ";
-        }
-        delete tfn;
+    if (t.type == "op") {
+        perform_unit_test_helper<OperatorTest>(test, t, res, transaction, context);
+    } else if (t.type == "tfn") {
+        perform_unit_test_helper<TransformationTest>(test, t, res, transaction, context);
     } else {
-        std::cerr << "Failed. Test type is unknown: << " << t->type;
+        std::cerr << "Failed. Test type is unknown: << " << t.type;
         std::cerr << std::endl;
     }
 
-    if (test->m_automake_output) {
-        std::cout << t->name << " "
-            << modsecurity::utils::string::toHexIfNeeded(t->input)
+    if (test.m_automake_output) {
+        std::cout << t.name << " "
+            << modsecurity::utils::string::toHexIfNeeded(t.input)
             << std::endl;
     }
 }
@@ -151,24 +314,22 @@ int main(int argc, char **argv) {
         test.load_tests("test-cases/secrules-language-tests/transformations");
     }
 
-    for (std::pair<std::string, std::vector<UnitTest *> *> a : test) {
-        std::vector<UnitTest *> *tests = a.second;
-
-        total += tests->size();
-        for (UnitTest *t : *tests) {
+    for (auto& [filename, tests] : test) {
+        total += tests.size();
+        for (auto &t : tests) {
             ModSecurityTestResults<UnitTest> r;
 
             if (!test.m_automake_output) {
-                std::cout << "  " << a.first << "...\t";
+                std::cout << "  " << filename << "...\t";
             }
-            perform_unit_test(&test, t, &r);
+            perform_unit_test(test, *t, r);
 
             if (!test.m_automake_output) {
                 int skp = 0;
                 if (r.size() == 0) {
                     std::cout << KGRN << "0 tests failed.";
                 } else {
-                    for (auto &i : r) {
+                    for (const auto &i : r) {
                         if (i->skipped == true) {
                             skp++;
                         }
@@ -189,11 +350,15 @@ int main(int argc, char **argv) {
 
     if (!test.m_automake_output) {
         std::cout << "Total >> "  << total << std::endl;
+
+        for (const auto t : results) {
+            std::cout << t->print() << std::endl;
+        }
     }
 
-    for (UnitTest *t : results) {
-        std::cout << t->print() << std::endl;
-    }
+    const int skp = std::count_if(results.cbegin(), results.cend(), [](const auto &i)
+                                    { return i->skipped; });
+    const int failed = results.size() - skp;
 
     if (!test.m_automake_output) {
         std::cout << std::endl;
@@ -202,13 +367,7 @@ int main(int argc, char **argv) {
         if (results.size() == 0) {
             std::cout << KGRN << "All tests passed" << RESET << std::endl;
         } else {
-            int skp = 0;
-            for (auto &i : results) {
-                if (i->skipped == true) {
-                    skp++;
-                }
-            }
-            std::cout << KRED << results.size()-skp << " failed.";
+            std::cout << KRED << failed << " failed.";
             std::cout << RESET << std::endl;
             if (skp > 0) {
                 std::cout << " " << std::to_string(skp) << " ";
@@ -217,13 +376,5 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (std::pair<std::string, std::vector<UnitTest *> *> a : test) {
-        std::vector<UnitTest *> *vec = a.second;
-        for (int i = 0; i < vec->size(); i++) {
-            delete vec->at(i);
-        }
-        delete vec;
-    }
+    return failed;
 }
-
-

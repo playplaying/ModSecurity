@@ -12,7 +12,7 @@
  * directly using the email address security@modsecurity.org.
  *
  */
-#if WITH_PCRE2
+#ifndef WITH_PCRE
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
 #else
@@ -33,6 +33,12 @@ namespace modsecurity {
 namespace Utils {
 
 #define OVECCOUNT 900
+
+enum class RegexResult {
+    Ok,
+    ErrorMatchLimit,
+    ErrorOther,
+};
 
 class SMatch {
  public:
@@ -65,7 +71,8 @@ struct SMatchCapture {
 
 class Regex {
  public:
-    explicit Regex(const std::string& pattern_, bool ignoreCase = false);
+    explicit Regex(const std::string& pattern_, bool ignoreCase = false,
+        bool multiLine = true);
     ~Regex();
 
     // m_pc and m_pce can't be easily copied
@@ -73,22 +80,24 @@ class Regex {
     Regex& operator=(const Regex&) = delete;
 
     bool hasError() const {
-        return (m_pc == NULL);
+        return (m_pc == nullptr);
     }
     std::list<SMatch> searchAll(const std::string& s) const;
-    bool searchOneMatch(const std::string& s, std::vector<SMatchCapture>& captures) const;
-    bool searchGlobal(const std::string& s, std::vector<SMatchCapture>& captures) const;
+    RegexResult searchOneMatch(const std::string& s, std::vector<SMatchCapture>& captures, unsigned long match_limit = 0) const;
+    RegexResult searchGlobal(const std::string& s, std::vector<SMatchCapture>& captures, unsigned long match_limit = 0) const;
     int search(const std::string &s, SMatch *match) const;
     int search(const std::string &s) const;
 
     const std::string pattern;
  private:
-#if WITH_PCRE2
+    RegexResult to_regex_result(int pcre_exec_result) const;
+
+#ifndef WITH_PCRE
     pcre2_code *m_pc;
     int m_pcje;
 #else
-    pcre *m_pc = NULL;
-    pcre_extra *m_pce = NULL;
+    pcre *m_pc = nullptr;
+    pcre_extra *m_pce = nullptr;
 #endif
 };
 

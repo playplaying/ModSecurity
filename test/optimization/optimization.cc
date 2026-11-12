@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     }
 
 
-    for (auto &x : files) {
+    for (const auto &x : files) {
         std::cout << "Loading file: " << x << std::endl;
         if (modsecRules->loadFromUri(x.c_str()) < 0) {
             std::cout << "Not able to load the rules" << std::endl;
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            if (dynamic_cast<modsecurity::RuleUnconditional *>(z.get()) != nullptr) {
+            if (dynamic_cast<modsecurity::RuleUnconditional *>(z.get())) {
                 std::string op = "Unconditional";
                 if (operators.count(op) > 0) {
                     operators[op] = 1 + operators[op];
@@ -96,10 +96,8 @@ int main(int argc, char **argv) {
                 }
             }
 
-            if (dynamic_cast<modsecurity::RuleWithOperator *>(z.get()) != nullptr) {
-                auto *rwo = dynamic_cast<modsecurity::RuleWithOperator *>(z.get());
-
-                std::string op = rwo->getOperatorName();
+            if (const auto *rwo = dynamic_cast<modsecurity::RuleWithOperator *>(z.get())) {
+                const auto &op = rwo->getOperatorName();
                 if (operators.count(op) > 0) {
                     operators[op] = 1 + operators[op];
                 } else {
@@ -114,8 +112,8 @@ int main(int argc, char **argv) {
         }
 
         std::cout << " Operators" << std::endl;
-        for (auto &z : operators) {
-            auto &s = z.second;
+        for (const auto &z : operators) {
+            const auto &s = z.second;
             std::cout << "   " << std::left << std::setw(20) << z.first;
             std::cout << std::right << std::setw(4) << s;
             std::cout << std::endl;

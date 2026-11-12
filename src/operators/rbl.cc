@@ -16,10 +16,15 @@
 #include "src/operators/rbl.h"
 
 #include <sys/types.h>
+#ifndef WIN32
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#else
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#endif
 
 #include <string>
 
@@ -68,8 +73,8 @@ std::string Rbl::mapIpToAddress(const std::string &ipStr, Transaction *trans) co
 
 
 void Rbl::futherInfo_httpbl(struct sockaddr_in *sin, const std::string &ipStr,
-    Transaction *trans) {
-    char *respBl;
+    const Transaction *trans) {
+    const char *respBl;
     int first, days, score, type;
 #ifndef NO_LOGS
     std::string ptype;
@@ -126,7 +131,7 @@ void Rbl::futherInfo_httpbl(struct sockaddr_in *sin, const std::string &ipStr,
 
 
 void Rbl::futherInfo_spamhaus(unsigned int high8bits, const std::string &ipStr,
-    Transaction *trans) {
+    const Transaction *trans) {
     switch (high8bits) {
         case 2:
         case 3:
@@ -153,7 +158,7 @@ void Rbl::futherInfo_spamhaus(unsigned int high8bits, const std::string &ipStr,
 
 
 void Rbl::futherInfo_uribl(unsigned int high8bits, const std::string &ipStr,
-    Transaction *trans) {
+    const Transaction *trans) {
     switch (high8bits) {
         case 2:
             ms_dbg_a(trans, 4, "RBL lookup of " + ipStr + " succeeded (BLACK).");
@@ -180,7 +185,7 @@ void Rbl::futherInfo_uribl(unsigned int high8bits, const std::string &ipStr,
 
 
 void Rbl::furtherInfo(struct sockaddr_in *sin, const std::string &ipStr,
-    Transaction *trans, RblProvider provider) {
+    const Transaction *trans, RblProvider provider) {
     unsigned int high8bits = sin->sin_addr.s_addr >> 24;
 
     switch (provider) {
@@ -202,7 +207,7 @@ void Rbl::furtherInfo(struct sockaddr_in *sin, const std::string &ipStr,
 
 bool Rbl::evaluate(Transaction *t, RuleWithActions *rule,
         const std::string& ipStr,
-        std::shared_ptr<RuleMessage> ruleMessage) {
+        RuleMessage &ruleMessage) {
     struct addrinfo *info = NULL;
     std::string host = Rbl::mapIpToAddress(ipStr, t);
     int rc = 0;
@@ -221,9 +226,20 @@ bool Rbl::evaluate(Transaction *t, RuleWithActions *rule,
         return false;
     }
 
-    struct sockaddr *addr = info->ai_addr;
-    struct sockaddr_in *sin = (struct sockaddr_in *) addr;
-    furtherInfo(sin, ipStr, t, m_provider);
+    // SonarCloud suggested to use the init-statement to declare "addr" inside the if statement.
+    // I think that's not good here, because we need that in the else block
+    const struct sockaddr *addr = info->ai_addr;  // NOSONAR
+    if (addr->sa_family == AF_INET) {  // NOSONAR
+        struct sockaddr_in sin{};  // initialize an empty struct; we don't need port info
+        memcpy(&sin.sin_addr, addr->sa_data + 2, sizeof(sin.sin_addr));
+        sin.sin_family = AF_INET;
+        furtherInfo(&sin, ipStr, t, m_provider);
+    }
+    else {
+        ms_dbg_a(t, 7,  "Unsupported address family: " + std::to_string(addr->sa_family));
+        freeaddrinfo(info);
+        return false;
+    }
 
     freeaddrinfo(info);
     if (rule && t && rule->hasCaptureAction()) {

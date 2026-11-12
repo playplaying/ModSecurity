@@ -1,6 +1,342 @@
-v3.x.y - YYYY-MMM-DD (to be released)
--------------------------------------
+v3.0.17 - 2026-Sep-29
+---------------------
 
+  - [fix: t:htmlEntityDecode does not decode all ASCII named HTML entities]
+    [PR from private repo - @marcstern, @fzipi, @airween; fixed GHSA-cxqf-vgrr-xxrv]
+  - [fix: use secure value for host verification in case of remote rules download]
+    [PR from private repo - @amitu314, @airween; fixed GHSA-2vqc-36qp-ccmw]
+  - [fix: uninitialized pointer dereference in XML request body processor]
+    [PR from private repo - Tobias Klein (www.trapkit.de), @airween; fixed GHSA-jx3r-phvx-2jmj]
+  - [fix: response body inspection bypass with mixed case Content-Type value]
+    [PR from private repo - @zuesdevil, @airween; fixed GHSA-vmg8-j66p-vgvw]
+  - [fix: nullptr dereference if @rx/@rxGlobal pattern is invalid (at startup or after macro expansion)]
+    [PR from private repo - @AnnoyingTechnology, @fzipi, @airween; fixed GHSA-5m93-4h75-3p2w]
+  - [fix: t:removeComments behavior in case of adjacent comments]
+    [PR from private repo - @HEXER365, @airween; fixed GHSA-qrch-pjfr-9g47]
+  - [fix: t:base64DecodeExt does not handle '-' and '_' characters (URL-safe alphabet)]
+    [PR from private repo - @fzipi, @airween; fixed GHSA-4j47-8qcr-jf59]
+  - [fix: handle 'filename*' and duplicated 'filename' parameters in multipart Content-Disposition header;
+     add new variables MULTIPART_DUPLICATE_PART_HEADER, MULTIPART_FILENAME_CHARSET, MULTIPART_FILENAME_LANGUAGE]
+    [PR from private repo - @hnakamur, @fzipi, @theseion, @airween; fixed GHSA-5pww-8rfg-9crf]
+  - fix: align cppcheck 2.22.0 warnings
+    [PR #3645 - @airween]
+  - fix: seclang scanner mis-parsing escaped quotes right after a macro
+    [PR #3641 - @fzipi]
+  - fix: drop MDB_WRITEMAP to avoid LMDB freelist assertion crash
+    [PR #3639 - @fzipi]
+
+v3.0.16 - 2026-Jun-29
+---------------------
+
+  - [fix: wrong behavior in utf8toUnicode on i386 architecture]
+    [PR from private repo - @airween; fixed CVE-2026-52761]
+  - [fix: multipart/form-data request body parser invalidly handles `\r` and `\n` characters]
+    [PR from private repo - @sondt99, @dungNHVhust, @hnakamura, @airween; fixed CVE-2026-52747]
+  - fix(lexer): rejection of '@' in ctl:ruleRemoveTarget actions
+    [PR #3566, #3589 - @Jitterx69, @airween]
+  - fix: cppcheck warnings with version 2.21.0
+    [PR #3577 - @airween]
+  - ci: pin Windows version in workflow
+    [PR #3570 - @airween]
+  - Alternative fix for @inspectFile: improved fork safety with multi-threaded tests (PR #3489)
+    [PR #3552 - @Easton97-Jens]
+
+v3.0.15 - 2026-Apr-28
+---------------------
+
+  - [fix: unsig integer underflow issue in verify* operators]
+    [PR from private repo - @fumfel, @airween; fixed CVE-2026-42268]
+  - [fix: buffer overflow in hex_decode.cc]
+    [PR from private repo - @EsadCetiner, @fumfel, @airween; fixed CVE-2026-30923]
+  - Add is_interrupted flag in the audit JSON log
+    [PR #3553 - @meirdev]
+  - Add C API to retrieve matched rules from a transaction
+    [PR #3551 - @meirdev]
+  - fix: buffer overflow in multipart body proc
+    [PR #3546 - @fumfel, @airween]
+  - fix: heap buffer overflow in acmp pm
+    [PR #3544 - @fumfel, @airween]
+  - fix: nullptr dereference in seclang scanner
+    [PR #3543 - @fumfel, @airween]
+  - fix: probably UB (left shift of neg. val) in ip_tree
+    [PR #3541 - @fumfel, @airween]
+  - Add initial mbedTLS v4 support
+    [PR #3532 - @Easton97-Jens]
+  - Fix Lua Detection on ci_new
+    [PR #3531 - @Easton97-Jens]
+  - ci: update workflows (checkout v6, recursive submodules), prep for mbedTLS v4, Windows fixes
+    [PR #3529 - @Easton97-Jens]
+  - Update SQLi/XSS operators for libinjection v4.0.0 cleaned
+    [PR #3528 - @Easton97-Jens]
+  - feat: added Lua5.5 support
+    [PR #3525 - @airween]
+  - fix: cppcheck warnings
+    [PR #3508 - @airween]
+  - CI: Align workflow with configure.ac (recursive submodules, v2 Linux job, drop x32)
+    [PR #3504 - @Easton97-Jens]
+  - fix(parser): add destructor directives to prevent memory leaks
+    [PR #3500 - @fzipi]
+  - Add missing CRLF to regression test request bodies
+    [PR #3497 - @hnakamur]
+  - refactor: autotools files
+    [PR #3494 - @fzipi]
+  - V3/do not add newline to test body lines
+    [PR #3486 - @hnakamur]
+  - fix: cppcheck warnings, cppcheck 2.19.0
+    [PR #3485 - @airween]
+  - Fix multipart boundaries in regression tests
+    [PR #3482 - @hnakamur]
+  - v3: fix readme on running tests (fixes #3328)
+    [PR #3481 - @hnakamur]
+  - Collection: Include `<cstdint>`.
+    [PR #3473 - @Gacko]
+  - Minor edit with remove useless checks
+    [PR #3467 - @chenuduss]
+  - fix: encode possible binary characters from user input in audit logs
+    [PR #3464 - @airween]
+  - fix: libxml2 related deprecated issues in v3
+    [PR #3455 - @airween]
+  - correct handling result of CPTRetriveNode
+    [PR #3447 - @chenuduss]
+  - fix: ignore case when evaluating exceptions
+    [PR #3442 - @airween]
+  - fix: eliminate non-posix standard variables
+    [PR #3437 - @airween]
+  - chore: fix cppcheck warning
+    [PR #3434 - @airween]
+  - Add custom leading text to audit log lines
+    [PR #3432 - @szedenik-adam]
+  - fix: add Windows specific characters to config value syntax
+    [PR #3430 - @airween]
+  - fix: rx operators better null checks
+    [PR #3426 - @wooffie]
+  - fix: confusing indentation at acmp.cc
+    [PR #3424 - @wooffie]
+  - Refactoring the cleaning of MATCHED_VAR* variables
+    [PR #3422 - @airween]
+  - fix: integer type limits, 2nd try
+    [PR #3421 - @airween]
+  - fix: @pmFromFile with multiple files issue
+    [PR #3405 - @airween]
+  - Add hostname to JSON log
+    [PR #3393 - @JakubOnderka]
+  - Fix memory/socket leak in `UniqueId::ethernetMacAddress()`
+    [PR #3392 - @amezin]
+  - Buildsystem fixes
+    [PR #3390 - @arvedarved]
+  - Disable Expect when sending audit logs to remote HTTP server
+    [PR #3365 - @JakubOnderka]
+  - Simplify code for JSON audit log
+    [PR #3364 - @JakubOnderka]
+  - feat: improved XMLArgs processing
+    [PR #3363 - @airween]
+  - doc: update testing section of README
+    [PR #3354 - @cjihrig]
+  - fix: align code to fix cppcheck errors
+    [PR #3350 - @airween]
+
+v3.0.14 - 2025-Feb-25
+---------------------
+
+  - [fix: fixed htmlEntityDecode methods]
+    [PR from private repo - @theseion,@airween; fixed CVE-2025-27110]
+  - fix: Added missing header to avoid build error with gcc-15
+    [PR #3342 - @airween]
+  - Fix for issue #3334: build not finding YAJL
+    [PR #3335 - @RooHTaylor]
+  - fix: add value checking to @validateByteRange
+    [PR #3322 - @airween]
+  - fix: build library on OSX without GeoIP brew package
+    [PR #3319 - @theseion,@airween]
+  - Update README.md
+    [PR #3314 - @ElevationsRPG]
+  - Fix: Add false positive cppcheck-suppress for compatibility with upda…
+    [PR #3307 - @gberkes]
+  - fix: align TIME_MON variable's behavior
+    [PR #3306 - @M4tteoP,@theseion,@airween]
+  - Fix m_requestHostName variable behavior
+    [PR #3298 - @airween]
+  - Add regression rules for test
+    [PR #3291 - @hnakamur]
+  - Fix modsecurity-regression-test-secremoterules.txt URL in example
+    [PR #3287 - @hnakamur]
+  - Use latest version of cppcheck (2.15.0) to analyze codebase
+    [PR #3283 - @eduar-hte]
+  - Replace usage of range-checked 'at' method when vector/string has already been size checked
+    [PR #3280 - @eduar-hte]
+  - chore: add 'log' action to rule 200005
+    [PR #3266 - @airween]
+  - docs: add a logo picture for github dark theme
+    [PR #3264 - @xuruidong]
+  - Leverage std::make_unique & std::make_shared to create objects in the heap
+    [PR #3254 - @eduar-hte]
+  - Simplified handling of RuleMessage by removing usage of std::shared_ptr
+    [PR #3253 - @eduar-hte]
+  - Simplified constructors, copy constructors & assignment operators
+    [PR #3248 - @eduar-hte]
+
+v3.0.13 - 2024-Sep-03
+---------------------
+
+  - Adjust reference to modsecurity::utils::string::VALID_HEX
+    [PR #3243 - @eduar-hte]
+  - Lua::run: Move logging of str parameter to higher log level.
+    [PR #3240 - @frozenice]
+  - Remove unnecessary heap allocated copies in Transformation actions
+    [PR #3231 - @eduar-hte]
+  - Removed multiple heap-allocated copies in Pm::init & parse_pm_content
+    [PR #3233 - @eduar-hte]
+  - Unit tests results should not be displayed in 'automake output' mode
+    [PR #3232 - @eduar-hte]
+  - Replace usage of std::ctime, which is not safe in
+    multithread contexts
+    [PR #3228 - @eduar-hte]
+  - Removed unnecessary lock to call acmp_process_quick in Pm::evaluate
+    [PR #3227 - @eduar-hte]
+  - feat: Check if the MP header contains invalid character
+    [PR #3225 - @airween]
+  - Prevent concurrent access to data in InMemoryPerProcess'
+    resolveXXX methods
+    [PR #3216 - @eduar-hte]
+  - Remove several string copies and unnecessary heap allocations
+    [PR #3222 - @eduar-hte]
+  - Creating a std::string with a null pointer
+    is undefined behaviour
+    [PR #3220 - @eduar-hte]
+  - Simplifiy configuration to build using std C++17
+    [PR #3219 - @eduar-hte]
+  - Remove unnecessary dynamic casts
+    [PR #3218 - @eduar-hte]
+  - fix: Sonarcloud reported memleak fixes
+    [PR #3114 - @airween]
+  - V3/sonarcloud replace this declaration by a structured
+    binding declaration
+    [PR #3217 - @gberkes]
+  - Do not assume ModSecurityIntervention argument to
+    transaction::intervention has been initialized/cleaned
+    [PR #3212 - @eduar-hte]
+  - Refactor: used the init-statement to declare "pos" inside the
+    if statement
+    [PR #3214 - @gberkes]
+  - Refactor: moved 3 #include directives to the top of the file.
+    [PR #3213 - @gberkes]
+  - Fix SecRemoteRules regression test not to depend on a
+    specific error message
+    [PR #3211 - @eduar-hte]
+  - Fixed shared files deadlock in a multi-threaded Windows application
+    [PR #3210 - @eduar-hte]
+  - Add cleanup methods to complete C based ABI
+    [PR #3209 - @eduar-hte]
+  - Build on macOS with Apple silicon (arm64)
+    [PR #3208 - @eduar-hte]
+  - remove 'this throw' call in transaction
+    [PR #3207 - @gberkes]
+  - New API function: set hostname for log
+    [PR #3203 - @airween]
+  - Fixing typo in Dockerfile
+    [PR #3189 - @bitbehz]
+  - Simplify checkout of submodules in GitHub workflows (with support for git describe)
+    [PR #3185 - @eduar-hte]
+  - Update README.md: use submodule and use benchmark tool
+    [PR #3182 - @airween]
+  - Improve performance of VariableOrigin instances
+    [PR #3164 - @eduar-hte]
+  - Update libinjection & Mbed TLS
+    [PR #3161 - @eduar-hte]
+  - chore: add PR template (v3)
+    [PR #3160 - @fzipi]
+  - Update to seclang-scanner changes introduced by Windows support
+    [PR #3146 - @eduar-hte]
+  - GitHub build & quality assurance workflow updates
+    [PR #3144 - @eduar-hte]
+  - Add link to Rust bindings in README
+    [PR #3141 - @rkrishn7]
+  - Remove cppcheck suppressions with line numbers in test/cppcheck_suppressions.txt
+    [PR #3134 - @eduar-hte]
+  - Add support to build libModSecurity v3 on Windows
+    [PR #3132 - @eduar-hte]
+  - fix: update submodule url
+    [PR #3128 - @fzipi]
+  - fix(rbl): typo in rbl check selector
+    [PR #3127 - @fzipi]
+  - fix: Changed 'equal_range()' + loop by 'find()' in resolveFirst() methods
+    [PR #3117 - @airween]
+  - Deleted redundant code in 'ModSecurity::serverLog(...)'.
+    [PR #3116 - @gberkes]
+  - doc: Update CHANGES
+    [PR #3101 - @airween]
+  - Reduce the scope of variables in a for loop
+    [PR #3098 - @devzero2000]
+  - Clean up 'return' never will be executed.
+    [PR #3096 - @gberkes]
+  - fix: Replace obsolete macros
+    [PR #3095 - @airween]
+  - fix: Change 'SecEngineStatus' to Off by default
+    [PR #3092 - @airween]
+  - chore: update bug-report-for-version-3-x.md
+    [PR #3086 - @fzipi]
+  - test: Logical, syntax and cosmetic fixes on test cases
+    [PR #3080 - @MirkoDziadzka, @airween]
+  - Bump the C++ version from C++11 to C++17
+    [PR #3079 - @MirkoDziadzka]
+  - fix: makes uri decode platform independent
+    [PR #3016 - @M4tteoP]
+
+v3.0.12 - 2024-Jan-30
+---------------------
+
+  - Change REQUEST_FILENAME and REQUEST_BASENAME behavior
+    [Issue #3048 - @martinhsv, @theMiddleBlue, @theseion, @M4tteoP, @airween]
+  - Set the minimum security protocol version for SecRemoteRules
+    [Issue security/code-scanning/2 - @airween]
+
+v3.0.11 - 2023-Dec-06
+---------------------
+
+  - Add WRDE_NOCMD to wordexp call
+    [Issue #3024 - @sahruldotid, @martinhsv]
+  - Fix: validateDTD compile fails if when libxml2 not installed
+    [Issue #3014 - @zangobot, @martinhsv]
+  - Fix memory leak of validateDTD's dtd object
+    [Issue #3008 - @martinhsv, @zimmerle]
+  - Fix memory leaks in ValidateSchema
+    [Issue #3005 - @martinhsv, @zimmerle]
+  - Add support for expirevar action
+    [Issue #1803, #3001 - @martinhsv]
+  - Fix: lmdb regex match on non-null terminated string
+    [Issue #2985 - @martinhsv]
+  - Fix memory leaks in lmdb code (new'd strings)
+    [Issue #2983 - @martinhsv]
+  - Configure: add additional name to pcre2 pkg-config list
+    [Issue #2939 - @agebhar1, @fzipi, @martinhsv]
+
+v3.0.10 - 2023-Jul-25
+---------------------
+
+  - Fix: worst-case time in implementation of four transformations
+    [Issue #2934 - @martinhsv]
+  - Add TX synonym for MSC_PCRE_LIMITS_EXCEEDED
+    [Issue #2901 - @airween]
+  - Make MULTIPART_PART_HEADERS accessible to lua
+    [Issue #2916 - @martinhsv]
+  - Fix: Lua scripts cannot read whole collection at once
+    [Issue #2900 - @udi-aharon, @airween, @martinhsv]
+  - Fix: quoted Include config with wildcard
+    [Issue #2905 - @wiseelf, @airween, @martinhsv]
+  - Support isolated PCRE match limits
+    [Issue #2736 - @brandonpayton, @martinhsv]
+  - Fix: meta actions not applied if multiMatch in first rule of chain
+    [Issue #2867, #2868 - @mlevogiannis, @martinhsv]
+  - Fix: audit log may omit tags when multiMatch
+    [Issue #2866 - @mlevogiannis]
+  - Exclude CRLF from MULTIPART_PART_HEADER value
+    [Issue #2870 - @airween, @martinhsv]
+  - Configure: use AS_ECHO_N instead echo -n
+    [Issue #2894 - @liudongmiao, @martinhsv]
+  - Adjust position of memset from 2890
+    [Issue #2891 - @mirkodziadzka-avi, @martinhsv]
+  - Add test: empty lines in ipMatchFromFile test
+    [Issue #2846 - @tomsommer]
 
 
 v3.0.9 - 2023-Apr-12
@@ -92,7 +428,7 @@ v3.0.7 - 2022-May-30
 
 
 v3.0.6 - 2021-Nov-19
--------------------------------------
+--------------------
 
   - Support configurable limit on depth of JSON parsing
     [@theMiddleBlue, @martinhsv]

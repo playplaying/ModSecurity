@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -13,44 +13,15 @@
  *
  */
 
-#include "src/actions/transformations/remove_nulls.h"
-
-#include <string.h>
-
-#include <iostream>
-#include <string>
-#include <algorithm>
-#include <functional>
-#include <cctype>
-#include <locale>
-
-#include "modsecurity/transaction.h"
-#include "src/actions/transformations/transformation.h"
+#include "remove_nulls.h"
 
 
-namespace modsecurity {
-namespace actions {
-namespace transformations {
+namespace modsecurity::actions::transformations {
 
 
-std::string RemoveNulls::evaluate(const std::string &val,
-    Transaction *transaction) {
-    int64_t i;
-    std::string value(val);
-
-    i = 0;
-    while (i < value.size()) {
-        if (value.at(i) == '\0') {
-            value.erase(i, 1);
-        } else {
-            i++;
-        }
-    }
-
-    return value;
+bool RemoveNulls::transform(std::string &value, const Transaction *trans) const {
+    return remove_if(value, [](const auto c) { return c == '\0'; });
 }
 
 
-}  // namespace transformations
-}  // namespace actions
-}  // namespace modsecurity
+}  // namespace modsecurity::actions::transformations

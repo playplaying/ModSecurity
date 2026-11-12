@@ -22,13 +22,6 @@
 #include "src/operators/operator.h"
 
 
-#define UNICODE_ERROR_CHARACTERS_MISSING    -1
-#define UNICODE_ERROR_INVALID_ENCODING      -2
-#define UNICODE_ERROR_OVERLONG_CHARACTER    -3
-#define UNICODE_ERROR_RESTRICTED_CHARACTER  -4
-#define UNICODE_ERROR_DECODING_ERROR        -5
-
-
 namespace modsecurity {
 namespace operators {
 
@@ -40,7 +33,7 @@ class ValidateUtf8Encoding : public Operator {
 
     bool evaluate(Transaction *transaction, RuleWithActions *rule,
         const std::string &str,
-        std::shared_ptr<RuleMessage> ruleMessage) override;
+        RuleMessage &ruleMessage) override;
 
     static int detect_utf8_character(const unsigned char *p_read,
         unsigned int length);

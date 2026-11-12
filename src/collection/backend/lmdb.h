@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -27,12 +27,10 @@
 
 #ifdef WITH_LMDB
 #include <lmdb.h>
-#include <semaphore.h>
 #endif  // WITH_LMDB
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
-#include <pthread.h>
 
 #include "modsecurity/variable_value.h"
 #include "modsecurity/collection/collection.h"
@@ -83,7 +81,7 @@ class MDBEnvProvider {
     }
     MDB_env* GetEnv();
     MDB_dbi* GetDBI();
-    bool isValid();
+    bool isValid() const;
 
     ~MDBEnvProvider();
  private:
@@ -97,8 +95,7 @@ class MDBEnvProvider {
 class LMDB :
     public Collection {
  public:
-    explicit LMDB(std::string name);
-    void store(std::string key, std::string value) override;
+    explicit LMDB(const std::string &name);
 
     bool storeOrUpdateFirst(const std::string &key,
         const std::string &value) override;
@@ -107,6 +104,8 @@ class LMDB :
         const std::string &value) override;
 
     void del(const std::string& key) override;
+
+    void setExpiry(const std::string& key, int32_t expiry_seconds) override;
 
     std::unique_ptr<std::string> resolveFirst(const std::string& var) override;
 
@@ -122,7 +121,9 @@ class LMDB :
  private:
     int txn_begin(unsigned int flags, MDB_txn **ret);
     void string2val(const std::string& str, MDB_val *val);
-    void inline lmdb_debug(int rc, std::string op, std::string scope);
+    void inline lmdb_debug(int rc, const std::string &op, const std::string &scope);
+
+    void delIfExpired(const std::string& key);
 
     MDB_env *m_env;
     MDB_dbi m_dbi;

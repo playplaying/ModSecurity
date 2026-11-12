@@ -21,7 +21,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#include <io.h>
+#include "src/compat/msvc.h"
+#endif
 #include <stdlib.h>
 
 #include <fstream>
@@ -44,30 +49,29 @@ Parallel::~Parallel() {
 }
 
 
-inline std::string Parallel::logFilePath(time_t *t,
+inline std::string Parallel::logFilePath(const time_t *t,
     int part) {
-    struct tm timeinfo;
-    char tstr[300];
-    std::string name("");
+    std::string name;
 
+    struct tm timeinfo;
     localtime_r(t, &timeinfo);
 
     if (part & YearMonthDayDirectory) {
-        memset(tstr, '\0', 300);
-        strftime(tstr, 299, "/%Y%m%d", &timeinfo);
-        name = tstr;
+        char tstr[std::size("/yyyymmdd")];
+        strftime(tstr, std::size(tstr), "/%Y%m%d", &timeinfo);
+        name.append(tstr);
     }
 
     if (part & YearMonthDayAndTimeDirectory) {
-        memset(tstr, '\0', 300);
-        strftime(tstr, 299, "/%Y%m%d-%H%M", &timeinfo);
-        name = name + tstr;
+        char tstr[std::size("/yyyymmdd-hhmm")];
+        strftime(tstr, std::size(tstr), "/%Y%m%d-%H%M", &timeinfo);
+        name.append(tstr);
     }
 
     if (part & YearMonthDayAndTimeFileName) {
-        memset(tstr, '\0', 300);
-        strftime(tstr, 299, "/%Y%m%d-%H%M%S", &timeinfo);
-        name = name + tstr;
+        char tstr[std::size("/yyyymmdd-hhmmss")];
+        strftime(tstr, std::size(tstr), "/%Y%m%d-%H%M%S", &timeinfo);
+        name.append(tstr);
     }
 
     return name;
@@ -115,11 +119,11 @@ bool Parallel::write(Transaction *transaction, int parts, std::string *error) {
     } else {
         std::string boundary;
         generateBoundary(&boundary);
-        log = transaction->toOldAuditLogFormat(parts, "-" + boundary + "--");
+        log = transaction->toOldAuditLogFormat(parts, "-" + boundary + "--", m_audit->m_prefix);
     }
 
-    std::string logPath = m_audit->m_storage_dir;
-    fileName = logPath + fileName + "-" + *transaction->m_id.get();
+    const auto &logPath = m_audit->m_storage_dir;
+    fileName = logPath + fileName + "-" + transaction->m_id;
 
     if (logPath.empty()) {
         error->assign("Log path is not valid.");
@@ -159,8 +163,14 @@ bool Parallel::write(Transaction *transaction, int parts, std::string *error) {
 
     if (m_audit->m_path1.empty() == false
         && m_audit->m_path2.empty() == false) {
+        std::string logMd5;
+        if (!Utils::Md5::hexdigest(log, &logMd5)) {
+            error->assign("Failed to calculate audit log MD5 digest");
+            return false;
+        }
+
         std::string msg = transaction->toOldAuditLogFormatIndex(fileName,
-            log.length(), Utils::Md5::hexdigest(log));
+            log.length(), logMd5);
         ret = utils::SharedFiles::getInstance().write(m_audit->m_path2, msg,
             error);
         if (ret == false) {
@@ -169,8 +179,14 @@ bool Parallel::write(Transaction *transaction, int parts, std::string *error) {
     }
     if (m_audit->m_path1.empty() == false
         && m_audit->m_path2.empty() == true) {
+        std::string logMd5;
+        if (!Utils::Md5::hexdigest(log, &logMd5)) {
+            error->assign("Failed to calculate audit log MD5 digest");
+            return false;
+        }
+
         std::string msg = transaction->toOldAuditLogFormatIndex(fileName,
-            log.length(), Utils::Md5::hexdigest(log));
+            log.length(), logMd5);
         ret = utils::SharedFiles::getInstance().write(m_audit->m_path1, msg,
             error);
         if (ret == false) {
@@ -179,8 +195,14 @@ bool Parallel::write(Transaction *transaction, int parts, std::string *error) {
     }
     if (m_audit->m_path1.empty() == true
         && m_audit->m_path2.empty() == false) {
+        std::string logMd5;
+        if (!Utils::Md5::hexdigest(log, &logMd5)) {
+            error->assign("Failed to calculate audit log MD5 digest");
+            return false;
+        }
+
         std::string msg = transaction->toOldAuditLogFormatIndex(fileName,
-            log.length(), Utils::Md5::hexdigest(log));
+            log.length(), logMd5);
         ret = utils::SharedFiles::getInstance().write(m_audit->m_path2, msg,
             error);
         if (ret == false) {

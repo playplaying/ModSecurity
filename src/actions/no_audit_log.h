@@ -33,10 +33,9 @@ namespace actions {
 class NoAuditLog : public Action {
  public:
     explicit NoAuditLog(const std::string &action) 
-        : Action(action, RunTimeOnlyIfMatchKind) { }
+        : Action(action) { }
 
-    bool evaluate(RuleWithActions *rule, Transaction *transaction,
-        std::shared_ptr<RuleMessage> rm) override;
+    bool evaluate(RuleWithActions *rule, Transaction *transaction, RuleMessage &ruleMessage) override;
 };
 
 }  // namespace actions

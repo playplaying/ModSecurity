@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -13,66 +13,51 @@
  *
  */
 
-#include "src/actions/transformations/remove_comments_char.h"
-
-#include <iostream>
-#include <string>
-#include <algorithm>
-#include <functional>
-#include <cctype>
-#include <locale>
-
-#include "modsecurity/transaction.h"
-#include "src/actions/transformations/transformation.h"
+#include "remove_comments_char.h"
 
 
-namespace modsecurity {
-namespace actions {
-namespace transformations {
+namespace modsecurity::actions::transformations {
 
-RemoveCommentsChar::RemoveCommentsChar(const std::string &action) 
-    : Transformation(action) {
-    this->action_kind = 1;
-}
 
-std::string RemoveCommentsChar::evaluate(const std::string &val,
-    Transaction *transaction) {
-    int64_t i;
-    std::string value(val);
+bool RemoveCommentsChar::transform(std::string &value, const Transaction *trans) const {
+    char *d = value.data();
+    const char *s = d;
+    const char *e = s + value.size();
 
-    i = 0;
-    while (i < value.size()) {
-        if (value.at(i) == '/'
-            && (i+1 < value.size()) && value.at(i+1) == '*') {
-            value.erase(i, 2);
-        } else if (value.at(i) == '*'
-            && (i+1 < value.size()) && value.at(i+1) == '/') {
-            value.erase(i, 2);
-        } else if (value.at(i) == '<'
-            && (i+1 < value.size())
-            && value.at(i+1) == '!'
-            && (i+2 < value.size())
-            && value.at(i+2) == '-'
-            && (i+3 < value.size())
-            && value.at(i+3) == '-') {
-            value.erase(i, 4);
-        } else if (value.at(i) == '-'
-            && (i+1 < value.size()) && value.at(i+1) == '-'
-            && (i+2 < value.size()) && value.at(i+2) == '>') {
-            value.erase(i, 3);
-        } else if (value.at(i) == '-'
-            && (i+1 < value.size()) && value.at(i+1) == '-') {
-            value.erase(i, 2);
-        } else if (value.at(i) == '#') {
-            value.erase(i, 1);
+    while (s < e) {
+        if (*s == '/'
+            && (s+1 < e) && *(s+1) == '*') {
+            s += 2;
+        } else if (*s == '*'
+            && (s+1 < e) && *(s+1) == '/') {
+            s += 2;
+        } else if (*s == '<'
+            && (s+1 < e)
+            && *(s+1) == '!'
+            && (s+2 < e)
+            && *(s+2) == '-'
+            && (s+3 < e)
+            && *(s+3) == '-') {
+            s += 4;
+        } else if (*s == '-'
+            && (s+1 < e) && *(s+1) == '-'
+            && (s+2 < e) && *(s+2) == '>') {
+            s += 3;
+        } else if (*s == '-'
+            && (s+1 < e) && *(s+1) == '-') {
+            s += 2;
+        } else if (*s == '#') {
+            s += 1;
         } else {
-            i++;
+            *d++ = *s++;
         }
     }
-    return value;
+
+    const auto changed = d != s;
+    const auto new_len = d - value.c_str();
+    value.resize(new_len);
+    return changed;
 }
 
-}  // namespace transformations
-}  // namespace actions
-}  // namespace modsecurity
+}  // namespace modsecurity::actions::transformations
 

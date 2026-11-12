@@ -14,6 +14,7 @@ read_LDADD = \
 	$(LMDB_LDADD) \
 	$(LUA_LDADD) \
 	$(PCRE_LDADD) \
+	$(PCRE2_LDADD) \
 	$(SSDEEP_LDADD) \
 	$(YAJL_LDADD)
 
@@ -21,7 +22,6 @@ read_LDFLAGS = \
 	-L$(top_builddir)/src/.libs/ \
 	$(GEOIP_LDFLAGS) \
 	-lmodsecurity \
-	-lpthread \
 	-lm \
 	-lstdc++ \
 	$(LMDB_LDFLAGS) \
@@ -32,7 +32,6 @@ read_LDFLAGS = \
 
 read_CPPFLAGS = \
 	$(GLOBAL_CFLAGS) \
-	-std=c++11 \
 	-I$(top_builddir)/headers \
 	-I$(top_builddir) \
 	-g \
@@ -48,6 +47,7 @@ read_CPPFLAGS = \
 	$(LMDB_CFLAGS) \
 	$(LUA_CFLAGS) \
 	$(PCRE_CFLAGS) \
+	$(PCRE2_CFLAGS) \
 	$(LIBXML2_CFLAGS)
 
 

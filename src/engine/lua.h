@@ -36,6 +36,9 @@ class LuaScriptBlob {
         m_data(NULL),
         m_len(0) { }
 
+    LuaScriptBlob(const LuaScriptBlob&) = delete;
+    LuaScriptBlob& operator=(const LuaScriptBlob&) = delete;
+
     ~LuaScriptBlob() {
         if (m_data) {
             free(m_data);
@@ -68,7 +71,7 @@ class Lua {
     Lua() { }
 
     bool load(const std::string &script, std::string *err);
-    int run(Transaction *t, const std::string &str="");
+    int run(Transaction *t, const std::string &str = "");
     static bool isCompatible(const std::string &script, Lua *l, std::string *error);
 
 #ifdef WITH_LUA
@@ -79,8 +82,8 @@ class Lua {
     static int getvar(lua_State *L);
     static int getvars(lua_State *L);
     static int setvar(lua_State *L);
-    static std::string applyTransformations(lua_State *L, Transaction *t,
-        int idx, std::string var);
+    static void applyTransformations(lua_State *L, const Transaction *t,
+        int idx, std::string &var);
 
     LuaScriptBlob m_blob;
 #endif

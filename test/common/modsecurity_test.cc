@@ -46,7 +46,7 @@ std::string ModSecurityTest<T>::header() {
 }
 
 template <class T>
-bool ModSecurityTest<T>::load_test_json(std::string file) {
+bool ModSecurityTest<T>::load_test_json(const std::string &file) {
     char errbuf[1024];
     yajl_val node;
 
@@ -68,22 +68,21 @@ bool ModSecurityTest<T>::load_test_json(std::string file) {
         return false;
     }
 
-    size_t num_tests = node->u.array.len;
-    for ( int i = 0; i < num_tests; i++ ) {
-        yajl_val obj = node->u.array.values[i];
-
-        T *u = T::from_yajl_node(obj);
+    if (m_format) {
+        auto u = T::from_yajl_node(node);
         u->filename = file;
 
-        if (this->count(u->filename + ":" + u->name) == 0) {
-            std::vector<T *> *vector = new std::vector<T *>;
-            vector->push_back(u);
-            std::string filename(u->filename + ":" + u->name);
-            std::pair<std::string, std::vector<T*>*> a(filename, vector);
-            this->insert(a);
-        } else {
-            std::vector<T *> *vec = this->at(u->filename + ":" + u->name);
-            vec->push_back(u);
+        (*this)[file].push_back(std::move(u));
+    } else {
+        size_t num_tests = node->u.array.len;
+        for ( int i = 0; i < num_tests; i++ ) {
+            yajl_val obj = node->u.array.values[i];
+
+            auto u = T::from_yajl_node(obj);
+            u->filename = file;
+
+            const auto key = u->filename + ":" + u->name;
+            (*this)[key].push_back(std::move(u));
         }
     }
 
@@ -94,13 +93,13 @@ bool ModSecurityTest<T>::load_test_json(std::string file) {
 
 
 template <class T>
-std::pair<std::string, std::vector<T *>>*
-ModSecurityTest<T>::load_tests(std::string path) {
+void
+ModSecurityTest<T>::load_tests(const std::string &path) {
     DIR *dir;
-    struct dirent *ent;
+    const struct dirent *ent;
     struct stat buffer;
 
-    if ((dir = opendir(path.c_str())) == NULL) {
+    if ((dir = opendir(path.c_str())) == nullptr) {
         /* if target is a file, use it as a single test. */
         if (stat(path.c_str(), &buffer) == 0) {
             if (load_test_json(path) == false) {
@@ -108,10 +107,10 @@ ModSecurityTest<T>::load_tests(std::string path) {
                 std::cout << std::endl;
             }
         }
-        return NULL;
+        return;
     }
 
-    while ((ent = readdir(dir)) != NULL) {
+    while ((ent = readdir(dir)) != nullptr) {
         std::string filename = ent->d_name;
         std::string json = ".json";
         if (filename.size() < json.size()
@@ -124,15 +123,14 @@ ModSecurityTest<T>::load_tests(std::string path) {
         }
     }
     closedir(dir);
-
-    return NULL;
 }
 
 
 template <class T>
-std::pair<std::string, std::vector<T *>>* ModSecurityTest<T>::load_tests() {
-    return load_tests(this->target);
+void ModSecurityTest<T>::load_tests() {
+    load_tests(this->target);
 }
+
 
 template <class T>
 void ModSecurityTest<T>::cmd_options(int argc, char **argv) {
@@ -144,6 +142,17 @@ void ModSecurityTest<T>::cmd_options(int argc, char **argv) {
     if (argc > i && strcmp(argv[i], "countall") == 0) {
         i++;
         m_count_all = true;
+    }
+    if (argc > i && strcmp(argv[i], "mtstress") == 0) {
+        i++;
+        m_test_multithreaded = true;
+    }
+    if (argc > i && strcmp(argv[i], "format") == 0) {
+        i++;
+        m_format = true;
+    }
+    if (std::getenv("UPDATE_CONTENT_LENGTH")) {
+        m_update_content_length = true;
     }
     if (std::getenv("AUTOMAKE_TESTS")) {
         m_automake_output = true;

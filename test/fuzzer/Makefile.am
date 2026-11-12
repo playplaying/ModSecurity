@@ -18,6 +18,7 @@ afl_fuzzer_LDADD = \
 	$(CURL_LDADD) \
 	$(GEOIP_LDFLAGS) $(GEOIP_LDADD) \
 	$(PCRE_LDADD) \
+	$(PCRE2_LDADD) \
 	$(YAJL_LDFLAGS) $(YAJL_LDADD) \
 	$(LMDB_LDFLAGS) $(LMDB_LDADD) \
 	$(MAXMIND_LDFLAGS) $(MAXMIND_LDADD) \
@@ -30,7 +31,6 @@ afl_fuzzer_LDADD = \
 
 
 afl_fuzzer_CPPFLAGS = \
-	-std=c++11 \
 	-Icommon \
 	-I../ \
 	-I../../ \
@@ -45,4 +45,5 @@ afl_fuzzer_CPPFLAGS = \
 	$(YAJL_CFLAGS) \
 	$(LMDB_CFLAGS) \
 	$(PCRE_CFLAGS) \
+	$(PCRE2_CFLAGS) \
 	$(LIBXML2_CFLAGS)

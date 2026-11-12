@@ -26,18 +26,17 @@ namespace modsecurity {
 namespace actions {
 
 
-bool SetENV::init(std::string *error) {
-    return true;
-}
-
-
 bool SetENV::evaluate(RuleWithActions *rule, Transaction *t) {
     std::string colNameExpanded(m_string->evaluate(t));
 
     auto pair = utils::string::ssplit_pair(colNameExpanded, '=');
     ms_dbg_a(t, 8, "Setting environment variable: "
         + pair.first + " to " + pair.second);
+#ifndef WIN32
     setenv(pair.first.c_str(), pair.second.c_str(), /*overwrite*/ 1);
+#else
+    _putenv_s(pair.first.c_str(), pair.second.c_str());
+#endif
 
     return true;
 }

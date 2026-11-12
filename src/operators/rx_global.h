@@ -42,7 +42,10 @@ class RxGlobal : public Operator {
             m_couldContainsMacro = true;
         }
 
-    ~RxGlobal() {
+    RxGlobal(const RxGlobal&) = delete;
+    RxGlobal& operator=(const RxGlobal&) = delete;
+
+    ~RxGlobal() override {
         if (m_string->m_containsMacro == false && m_re != NULL) {
             delete m_re;
             m_re = NULL;
@@ -51,7 +54,7 @@ class RxGlobal : public Operator {
 
     bool evaluate(Transaction *transaction, RuleWithActions *rule,
         const std::string& input,
-        std::shared_ptr<RuleMessage> ruleMessage) override;
+        RuleMessage &ruleMessage) override;
 
     bool init(const std::string &arg, std::string *error) override;
 

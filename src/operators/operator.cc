@@ -21,6 +21,7 @@
 
 #include "modsecurity/transaction.h"
 #include "src/run_time_string.h"
+#include "src/utils/regex.h"
 #include "src/utils/string.h"
 #include "src/operators/begins_with.h"
 #include "src/operators/contains.h"
@@ -70,12 +71,57 @@ namespace modsecurity {
 namespace operators {
 
 
+void Operator::reportRegexCompileError(Transaction *transaction,
+    const Utils::Regex &re) {
+    if (transaction == nullptr) {
+        return;
+    }
+
+    ms_dbg_a(transaction, 1, "Error with regular expression: \"" + re.pattern + "\"");
+    transaction->m_variableMscPcreError.set("1", transaction->m_variableOffset);
+    transaction->m_collections.m_tx_collection->storeOrUpdateFirst("MSC_PCRE_ERROR", "1");
+    ms_dbg_a(transaction, 7, "Set TX.MSC_PCRE_ERROR to 1");
+}
+
+
+void Operator::reportRegexSearchError(Transaction *transaction,
+    const Utils::Regex &re, Utils::RegexResult result,
+    const std::string &opName) {
+    if (transaction == nullptr) {
+        return;
+    }
+
+    transaction->m_variableMscPcreError.set("1", transaction->m_variableOffset);
+    transaction->m_collections.m_tx_collection->storeOrUpdateFirst("MSC_PCRE_ERROR", "1");
+    ms_dbg_a(transaction, 7, "Set TX.MSC_PCRE_ERROR to 1");
+
+    const bool match_limit = (result == Utils::RegexResult::ErrorMatchLimit);
+    if (match_limit) {
+        transaction->m_variableMscPcreLimitsExceeded.set("1", transaction->m_variableOffset);
+        transaction->m_collections.m_tx_collection->storeOrUpdateFirst("MSC_PCRE_LIMITS_EXCEEDED", "1");
+        ms_dbg_a(transaction, 7, "Set TX.MSC_PCRE_LIMITS_EXCEEDED to 1");
+    }
+
+    ms_dbg_a(transaction, 1, opName + ": regex error '"
+        + (match_limit ? "MATCH_LIMIT" : "OTHER")
+        + "' for pattern '" + re.pattern + "'");
+}
+
+
 bool Operator::evaluateInternal(Transaction *transaction,
-    RuleWithActions *rule, const std::string& a, std::shared_ptr<RuleMessage> rm) {
-    bool res = evaluate(transaction, rule, a, rm);
+    RuleWithActions *rule, const std::string& a, RuleMessage &ruleMessage) {
+    const size_t referenceSize = ruleMessage.m_reference.size();
+    bool res = evaluate(transaction, rule, a, ruleMessage);
 
     if (m_negation) {
-        return !res;
+        res = !res;
+    }
+
+    /* Offsets logged by an evaluation that is not a match (a negated
+     * operator that found something) must not end up in the reference of
+     * the next value that does match. */
+    if (!res) {
+        ruleMessage.m_reference.resize(referenceSize);
     }
 
     return res;
@@ -112,7 +158,7 @@ std::string Operator::resolveMatchMessage(Transaction *t,
         if (m_couldContainsMacro == false) {
             ret = "Matched \"Operator `" + m_op + "' with parameter `" +
                 utils::string::limitTo(200, m_param) +
-                "' against variable `" + key + "' (Value: `" +
+                "' against variable `" + utils::string::toHexIfNeeded(key) + "' (Value: `" +
                 utils::string::limitTo(100,
                     utils::string::toHexIfNeeded(value)) + \
                 "' )";
@@ -120,7 +166,7 @@ std::string Operator::resolveMatchMessage(Transaction *t,
             std::string p(m_string->evaluate(t));
             ret = "Matched \"Operator `" + m_op + "' with parameter `" +
                 utils::string::limitTo(200, p) +
-                "' against variable `" + key + "' (Value: `" +
+                "' against variable `" + utils::string::toHexIfNeeded(key) + "' (Value: `" +
                 utils::string::limitTo(100,
                     utils::string::toHexIfNeeded(value)) +
                 "' )";
@@ -140,7 +186,7 @@ bool Operator::evaluate(Transaction *transaction, const std::string& a) {
 
 Operator *Operator::instantiate(const std::string& op, const std::string& param_str) {
     std::string op_ = utils::string::tolower(op);
-    std::unique_ptr<RunTimeString> param(new RunTimeString());
+    auto param = std::make_unique<RunTimeString>();
     param->appendText(param_str);
 
     IF_MATCH(beginswith) { return new BeginsWith(std::move(param)); }

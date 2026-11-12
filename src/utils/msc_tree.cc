@@ -15,9 +15,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#else
+#include "src/compat/msvc.h"
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#endif
 
 #include "src/utils/msc_tree.h"
 
@@ -258,11 +264,13 @@ int InsertNetmask(TreeNode *node, TreeNode *parent, TreeNode *new_node,
             }
 
             node->count++;
+
             node->netmasks = reinterpret_cast<unsigned char *>(malloc(node->count * sizeof(unsigned char)));
+            if(node->netmasks == NULL) {
+                return 0;
+            }
             memset(node->netmasks, 0, (node->count *  sizeof(unsigned char)));
 
-            if(node->netmasks == NULL)
-                return 0;
             if ((node->count-1) == 0) {
                 node->netmasks[0] = netmask;
                 return 1;
@@ -660,14 +668,21 @@ TreeNode *CPTFindElementIPNetblock(unsigned char *ipdata, unsigned char ip_bitma
 
         node = CPTRetriveNode(ipdata, ip_bitmask, node);
 
-        if (node && node->bit != ip_bitmask)    {
+        if(node == NULL)    {
+            //if (msr && msr->txcfg->debuglog_level >= 9) {
+            //    msr_log(msr, 9, "CPTFindElement: Node tree is NULL.");
+            //}
+            return node;
+        }
+
+        if (node->bit != ip_bitmask)    {
             //if (msr && msr->txcfg->debuglog_level >= 9) {
             //    msr_log(msr, 9, "CPTFindElementIPNetblock: Found a tree node but netmask is different.");
             //}
             return NULL;
         }
 
-        if (node && node->prefix == NULL)   {
+        if (node->prefix == NULL)   {
             //if (msr && msr->txcfg->debuglog_level >= 9) {
             //    msr_log(msr, 9, "CPTFindElementIPNetblock: Found a tree node but prefix is NULL.");
             //}
@@ -737,18 +752,18 @@ TreeNode *CPTFindElement(unsigned char *ipdata, unsigned int ip_bitmask, CPTTree
 
     node = CPTRetriveNode(temp_data, ip_bitmask, node);
 
-    if (node && (node->bit != ip_bitmask)) {
-        //if (msr && msr->txcfg->debuglog_level >= 9) {
-        //    msr_log(msr, 9, "CPTFindElement: Found a tree node but netmask is different.");
-        //}
-        return NULL;
-    }
-
     if(node == NULL)    {
         //if (msr && msr->txcfg->debuglog_level >= 9) {
         //    msr_log(msr, 9, "CPTFindElement: Node tree is NULL.");
         //}
         return node;
+    }
+
+    if (node->bit != ip_bitmask) {
+        //if (msr && msr->txcfg->debuglog_level >= 9) {
+        //    msr_log(msr, 9, "CPTFindElement: Found a tree node but netmask is different.");
+        //}
+        return NULL;
     }
 
     if(node->prefix == NULL)    {
@@ -959,7 +974,7 @@ int tree_contains_ip(TreeRoot *rtree,
         }
     }
 
-    
+
     return 0;
 }
 

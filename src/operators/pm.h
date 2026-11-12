@@ -17,9 +17,9 @@
 #define SRC_OPERATORS_PM_H_
 
 #include <string>
-#include <list>
 #include <memory>
 #include <utility>
+#include <mutex>
 
 #include "src/operators/operator.h"
 #include "src/utils/acmp.h"
@@ -40,10 +40,14 @@ class Pm : public Operator {
         : Operator(n, std::move(param)) {
         m_p = acmp_create(0);
     }
-    ~Pm();
+
+    Pm(const Pm&) = delete;
+    Pm& operator=(const Pm&) = delete;
+
+    ~Pm() override;
     bool evaluate(Transaction *transaction, RuleWithActions *rule,
         const std::string &str,
-        std::shared_ptr<RuleMessage> ruleMessage) override;
+        RuleMessage &ruleMessage) override;
 
 
     bool init(const std::string &file, std::string *error) override;
@@ -52,12 +56,6 @@ class Pm : public Operator {
 
  protected:
     ACMP *m_p;
-
-#ifdef MODSEC_MUTEX_ON_PM
-
- private:
-    pthread_mutex_t m_lock;
-#endif
 };
 
 

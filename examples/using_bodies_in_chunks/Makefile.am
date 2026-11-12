@@ -14,6 +14,7 @@ simple_request_LDADD = \
 	$(LMDB_LDADD) \
 	$(LUA_LDADD) \
 	$(PCRE_LDADD) \
+	$(PCRE2_LDADD) \
 	$(SSDEEP_LDADD) \
 	$(YAJL_LDADD)
 
@@ -21,19 +22,16 @@ simple_request_LDFLAGS = \
 	-L$(top_builddir)/src/.libs/ \
 	$(GEOIP_LDFLAGS) \
 	-lmodsecurity \
-	-lpthread \
 	-lm \
 	-lstdc++ \
 	$(MAXMIND_LDFLAGS) \
 	$(LMDB_LDFLAGS) \
-	-lpthread \
 	$(LUA_LDFLAGS) \
 	$(SSDEEP_LDFLAGS) \
 	$(YAJL_LDFLAGS)
 
 simple_request_CPPFLAGS = \
 	$(GLOBAL_CFLAGS) \
-	-std=c++11 \
 	-I$(top_builddir)/headers \
 	-I$(top_builddir) \
 	-g \
@@ -49,6 +47,7 @@ simple_request_CPPFLAGS = \
 	$(LMDB_CFLAGS) \
 	$(LUA_CFLAGS) \
 	$(PCRE_CFLAGS) \
+	$(PCRE2_CFLAGS) \
 	$(LIBXML2_CFLAGS)
 
 MAINTAINERCLEANFILES = \

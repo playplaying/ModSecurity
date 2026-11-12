@@ -19,7 +19,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#include <io.h>
+#endif
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/time.h>
@@ -34,7 +38,7 @@ RulesSet *rules = NULL;
 ModSecurity *modsec = NULL;
 
 
-void process_special_request (int j) {
+static void process_special_request (int j) {
     Transaction *transaction;
     transaction = msc_new_transaction(modsec, rules, NULL);
 
@@ -56,7 +60,7 @@ void process_special_request (int j) {
     msc_transaction_cleanup(transaction);
 }
 
-void process_request (int j) {
+static void process_request (int j) {
     int i;
     
     for (i = 0; i < REQUESTS_PER_PROCESS; i++) {

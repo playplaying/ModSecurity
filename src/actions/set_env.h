@@ -36,11 +36,10 @@ class SetENV : public Action {
         : Action(_action) { }
 
     explicit SetENV(std::unique_ptr<RunTimeString> z)
-        : Action("setenv", RunTimeOnlyIfMatchKind),
+        : Action("setenv"),
             m_string(std::move(z)) { }
 
     bool evaluate(RuleWithActions *rule, Transaction *transaction) override;
-    bool init(std::string *error) override;
 
  private:
     std::unique_ptr<RunTimeString> m_string;

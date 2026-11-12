@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -36,15 +36,15 @@ bool RulesExceptions::loadUpdateActionById(double id,
     std::string *error) {
 
     for (auto &a : *actions) {
-        if (a->action_kind == actions::Action::ConfigurationKind) {
+        if (a->action_kind == actions::Action::Kind::ConfigurationKind) {
             std::cout << "General failure, action: " << a->m_name;
             std::cout << " has not expected to be used with UpdateActionByID.";
             std::cout << std::endl;
         } else if (a->action_kind
-            == actions::Action::RunTimeBeforeMatchAttemptKind) {
+            == actions::Action::Kind::RunTimeBeforeMatchAttemptKind) {
             m_action_pre_update_target_by_id.emplace(std::pair<double,
                 std::unique_ptr<actions::Action>>(id , std::move(a)));
-        } else if (a->action_kind == actions::Action::RunTimeOnlyIfMatchKind) {
+        } else if (a->action_kind == actions::Action::Kind::RunTimeOnlyIfMatchKind) {
             m_action_pos_update_target_by_id.emplace(std::pair<double,
                 std::unique_ptr<actions::Action>>(id , std::move(a)));
         } else {
@@ -58,7 +58,7 @@ bool RulesExceptions::loadUpdateActionById(double id,
 
 
 bool RulesExceptions::loadRemoveRuleByMsg(const std::string &msg,
-    std::string *error) {
+    const std::string *error) {
     m_remove_rule_by_msg.push_back(msg);
 
     return true;
@@ -66,7 +66,7 @@ bool RulesExceptions::loadRemoveRuleByMsg(const std::string &msg,
 
 
 bool RulesExceptions::loadRemoveRuleByTag(const std::string &msg,
-    std::string *error) {
+    const std::string *error) {
     m_remove_rule_by_tag.push_back(msg);
 
     return true;
@@ -122,7 +122,7 @@ bool RulesExceptions::loadUpdateTargetById(double id,
 bool RulesExceptions::load(const std::string &a, std::string *error) {
     bool added = false;
     std::vector<std::string> toRemove = utils::string::ssplit(a, ' ');
-    for (std::string &r : toRemove) {
+    for (const std::string &r : toRemove) {
         std::string b = modsecurity::utils::string::parserSanitizer(r);
         if (b.size() == 0) {
             continue;
@@ -254,11 +254,11 @@ bool RulesExceptions::merge(RulesExceptions *from) {
                     p.second));
     }
 
-    for (auto &p : from->m_remove_rule_by_msg) {
+    for (const auto &p : from->m_remove_rule_by_msg) {
         m_remove_rule_by_msg.push_back(p);
     }
 
-    for (auto &p : from->m_remove_rule_by_tag) {
+    for (const auto &p : from->m_remove_rule_by_tag) {
         m_remove_rule_by_tag.push_back(p);
     }
 

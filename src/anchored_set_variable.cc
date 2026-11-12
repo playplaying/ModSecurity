@@ -1,6 +1,7 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
  * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2026 OWASP Foundation (http://www.owasp.org/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -52,36 +53,22 @@ void AnchoredSetVariable::unset() {
 
 void AnchoredSetVariable::set(const std::string &key,
     const std::string &value, size_t offset, size_t len) {
-    std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-    std::string *v = new std::string(value);
-    VariableValue *var = new VariableValue(&m_name, &key, v);
-    delete v;
-
-    origin->m_offset = offset;
-    origin->m_length = len;
-
-    var->addOrigin(std::move(origin));
+    VariableValue *var = new VariableValue(&m_name, &key, &value);
+    var->addOrigin(len, offset);
     emplace(key, var);
 }
 
 
 void AnchoredSetVariable::set(const std::string &key,
     const std::string &value, size_t offset) {
-    std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-    std::string *v = new std::string(value);
-    VariableValue *var = new VariableValue(&m_name, &key, v);
-    delete v;
-
-    origin->m_offset = offset;
-    origin->m_length = value.size();
-
-    var->addOrigin(std::move(origin));
+    VariableValue *var = new VariableValue(&m_name, &key, &value);
+    var->addOrigin(value.size(), offset);
     emplace(key, var);
 }
 
 
 void AnchoredSetVariable::resolve(
-    std::vector<const VariableValue *> *l) {
+    std::vector<const VariableValue *> *l) const {
     for (const auto& x : *this) {
         l->insert(l->begin(), new VariableValue(x.second));
     }
@@ -89,8 +76,14 @@ void AnchoredSetVariable::resolve(
 
 
 void AnchoredSetVariable::resolve(
+    std::vector<const VariableValue *> *l) {
+    static_cast<const AnchoredSetVariable&>(*this).resolve(l);
+}
+
+
+void AnchoredSetVariable::resolve(
     std::vector<const VariableValue *> *l,
-    variables::KeyExclusions &ke) {
+    const variables::KeyExclusions &ke) const {
     for (const auto& x : *this) {
         if (!ke.toOmit(x.first)) {
             l->insert(l->begin(), new VariableValue(x.second));
@@ -99,6 +92,13 @@ void AnchoredSetVariable::resolve(
                 + " from target value.");
         }
     }
+}
+
+
+void AnchoredSetVariable::resolve(
+    std::vector<const VariableValue *> *l,
+    variables::KeyExclusions &ke) {  // cppcheck-suppress constParameterReference
+    static_cast<const AnchoredSetVariable&>(*this).resolve(l, ke);
 }
 
 
@@ -113,18 +113,17 @@ void AnchoredSetVariable::resolve(const std::string &key,
 
 std::unique_ptr<std::string> AnchoredSetVariable::resolveFirst(
     const std::string &key) {
-    auto range = equal_range(key);
-    for (auto it = range.first; it != range.second; ++it) {
-        std::unique_ptr<std::string> b(new std::string());
-        b->assign(it->second->getValue());
-        return b;
+
+    if (auto search = this->find(key); search != this->end()) {
+        return std::make_unique<std::string>(search->second->getValue());
     }
+
     return nullptr;
 }
 
-
+// cppcheck-suppress constParameterPointer  -  keep the old signatures for ABI compatibility
 void AnchoredSetVariable::resolveRegularExpression(Utils::Regex *r,
-    std::vector<const VariableValue *> *l) {
+    std::vector<const VariableValue *> *l) const {
     for (const auto& x : *this) {
         int ret = Utils::regex_search(x.first, *r);
         if (ret <= 0) {
@@ -136,8 +135,14 @@ void AnchoredSetVariable::resolveRegularExpression(Utils::Regex *r,
 
 
 void AnchoredSetVariable::resolveRegularExpression(Utils::Regex *r,
+    std::vector<const VariableValue *> *l) {
+    static_cast<const AnchoredSetVariable&>(*this).resolveRegularExpression(r, l);
+}
+
+// cppcheck-suppress constParameterPointer  -  keep the old signatures for ABI compatibility
+void AnchoredSetVariable::resolveRegularExpression(Utils::Regex *r,
     std::vector<const VariableValue *> *l,
-    variables::KeyExclusions &ke) {
+    const variables::KeyExclusions &ke) const {
     for (const auto& x : *this) {
         int ret = Utils::regex_search(x.first, *r);
         if (ret <= 0) {
@@ -150,6 +155,13 @@ void AnchoredSetVariable::resolveRegularExpression(Utils::Regex *r,
                 + " from target value.");
         }
     }
+}
+
+
+void AnchoredSetVariable::resolveRegularExpression(Utils::Regex *r,
+    std::vector<const VariableValue *> *l,
+    variables::KeyExclusions &ke) {  // cppcheck-suppress constParameterReference
+    static_cast<const AnchoredSetVariable&>(*this).resolveRegularExpression(r, l, ke);
 }
 
 

@@ -1,6 +1,7 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
  * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2026 OWASP Foundation (http://www.owasp.org/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -35,12 +36,12 @@ namespace variables {
 class Rule_DictElement : public VariableDictElement { \
  public:
     explicit Rule_DictElement(const std::string &dictElement)
-        : VariableDictElement(std::string("RULE"), dictElement) { }
+        : VariableDictElement(m_rule, dictElement) { }
 
     static void id(Transaction *t,
-        RuleWithActions *rule,
+        const RuleWithActions *rule,
         std::vector<const VariableValue *> *l) {
-        RuleWithActions *r = rule;
+        const RuleWithActions *r = rule;
 
         while (r && r->m_ruleId == 0) {
             r = r->m_chainedRuleParent;
@@ -49,23 +50,15 @@ class Rule_DictElement : public VariableDictElement { \
         if (!r || r->m_ruleId == 0) {
             return;
         }
-        std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-        std::string *a = new std::string(std::to_string(r->m_ruleId));
-        VariableValue *var = new VariableValue(&m_rule, &m_rule_id,
-            a
-        );
-        delete a;
-        origin->m_offset = 0;
-        origin->m_length = 0;
-        var->addOrigin(std::move(origin));
-        l->push_back(var);
+
+        addVariableOrigin(m_rule_id, std::to_string(r->m_ruleId), l);
     }
 
 
     static void rev(Transaction *t,
-        RuleWithActions *rule,
+        const RuleWithActions *rule,
         std::vector<const VariableValue *> *l) {
-        RuleWithActions *r = rule;
+        const RuleWithActions *r = rule;
 
         while (r && r->m_rev.empty()) {
             r = r->m_chainedRuleParent;
@@ -75,39 +68,21 @@ class Rule_DictElement : public VariableDictElement { \
             return;
         }
 
-        std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-        std::string *a = new std::string(r->m_rev);
-        VariableValue *var = new VariableValue(&m_rule, &m_rule_rev,
-            a
-        );
-        delete a;
-        origin->m_offset = 0;
-        origin->m_length = 0;
-        var->addOrigin(std::move(origin));
-        l->push_back(var);
+        addVariableOrigin(m_rule_rev, r->m_rev, l);
     }
 
 
     static void severity(Transaction *t,
-        RuleWithActions *rule,
+        const RuleWithActions *rule,
         std::vector<const VariableValue *> *l) {
-        RuleWithActions *r = rule;
+        const RuleWithActions *r = rule;
 
         while (r && !r->hasSeverity()) {
             r = r->m_chainedRuleParent;
         }
 
         if (r && r->hasSeverity()) {
-            std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-            std::string *a = new std::string(std::to_string(r->severity()));
-            VariableValue *var = new VariableValue(&m_rule, &m_rule_severity,
-                a
-            );
-            delete a;
-            origin->m_offset = 0;
-            origin->m_length = 0;
-            var->addOrigin(std::move(origin));
-            l->push_back(var);
+            addVariableOrigin(m_rule_severity, std::to_string(r->severity()), l);
         }
     }
 
@@ -122,16 +97,7 @@ class Rule_DictElement : public VariableDictElement { \
         }
 
         if (r && r->hasLogData()) {
-            std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-            std::string *a = new std::string(r->logData(t));
-            VariableValue *var = new VariableValue(&m_rule, &m_rule_logdata,
-                a
-            );
-            delete a;
-            origin->m_offset = 0;
-            origin->m_length = 0;
-            var->addOrigin(std::move(origin));
-            l->push_back(var);
+            addVariableOrigin(m_rule_logdata, r->logData(t), l);
         }
     }
 
@@ -145,39 +111,30 @@ class Rule_DictElement : public VariableDictElement { \
         }
 
         if (r && r->hasMsg()) {
-            std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-            std::string *a = new std::string(r->msg(t));
-            VariableValue *var = new VariableValue(&m_rule, &m_rule_msg,
-                a
-            );
-            delete a;
-            origin->m_offset = 0;
-            origin->m_length = 0;
-            var->addOrigin(std::move(origin));
-            l->push_back(var);
+            addVariableOrigin(m_rule_msg, r->msg(t), l);
         }
     }
 
     void evaluate(Transaction *t,
         RuleWithActions *rule,
         std::vector<const VariableValue *> *l) override {
-        if (m_dictElement == "id") {
+        if (m_dictElement == m_rule_id) {
             id(t, rule, l);
             return;
         }
-        if (rule && m_dictElement == "rev") {
+        if (rule && m_dictElement == m_rule_rev) {
             rev(t, rule, l);
             return;
         }
-        if (rule && m_dictElement == "severity") {
+        if (rule && m_dictElement == m_rule_severity) {
             severity(t, rule, l);
             return;
         }
-        if (m_dictElement == "logdata") {
+        if (m_dictElement == m_rule_logdata) {
             logData(t, rule, l);
             return;
         }
-        if (m_dictElement == "msg") {
+        if (m_dictElement == m_rule_msg) {
             msg(t, rule, l);
             return;
         }
@@ -189,6 +146,18 @@ class Rule_DictElement : public VariableDictElement { \
     static const std::string m_rule_severity;
     static const std::string m_rule_logdata;
     static const std::string m_rule_msg;
+
+private:
+
+    static inline void addVariableOrigin(const std::string &key,
+        const std::string &value,
+        std::vector<const VariableValue *> *l) {
+        auto var = new VariableValue(&m_rule, &key,
+            &value
+        );
+        var->addOrigin();
+        l->push_back(var);
+    }
 };
 
 

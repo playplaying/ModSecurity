@@ -38,10 +38,10 @@
  *     std::cout << "There is an intervention" << std::endl;
  * }
  *
- * ...      
+ * ...
  *
  * @endcode
- * 
+ *
  */
 
 /**
@@ -79,6 +79,11 @@
 #include <string>
 #include <memory>
 #endif
+
+
+#include "modsecurity/intervention.h"
+#include "modsecurity/transaction.h"
+#include "modsecurity/debug_log.h"
 
 
 #ifndef HEADERS_MODSECURITY_MODSECURITY_H_
@@ -160,7 +165,7 @@ namespace modsecurity {
      LoggingPhase,
     /**
      * Just a marking for the expected number of phases.
-     * 
+     *
      */
      NUMBER_OF_PHASES,
     };
@@ -169,11 +174,6 @@ namespace modsecurity {
 }  // namespace modsecurity
 #endif
 
-
-
-#include "modsecurity/intervention.h"
-#include "modsecurity/transaction.h"
-#include "modsecurity/debug_log.h"
 
 /**
  * TAG_NUM:
@@ -190,7 +190,7 @@ namespace modsecurity {
 
 #define MODSECURITY_MAJOR "3"
 #define MODSECURITY_MINOR "0"
-#define MODSECURITY_PATCHLEVEL "9"
+#define MODSECURITY_PATCHLEVEL "17"
 #define MODSECURITY_TAG ""
 #define MODSECURITY_TAG_NUM "100"
 
@@ -198,7 +198,7 @@ namespace modsecurity {
     MODSECURITY_MINOR "." MODSECURITY_PATCHLEVEL \
     MODSECURITY_TAG
 
-#define MODSECURITY_VERSION_NUM 3090100
+#define MODSECURITY_VERSION_NUM 30170100
 
 #define MODSECURITY_CHECK_VERSION(a) (MODSECURITY_VERSION_NUM <= a)
 
@@ -286,13 +286,13 @@ class ModSecurity {
     void setServerLogCb(ModSecLogCb cb);
     /**
      *
-     * properties   Properties to inform ModSecurity what kind of infornation
+     * properties   Properties to inform ModSecurity what kind of information
      *              is expected be returned.
      *
      */
     void setServerLogCb(ModSecLogCb cb, int properties);
 
-    void serverLog(void *data, std::shared_ptr<RuleMessage> rm);
+    void serverLog(void *data, const RuleMessage &rm);
 
     const std::string& getConnectorInformation() const;
 

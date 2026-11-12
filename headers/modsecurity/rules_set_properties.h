@@ -13,6 +13,14 @@
  *
  */
 
+#ifdef WIN32
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+#endif
 
 #ifdef __cplusplus
 #include <ctime>
@@ -22,6 +30,9 @@
 #include <list>
 #include <set>
 #include <cstring>
+#include <limits>
+#include <algorithm>
+#include <cstdint>
 #endif
 
 
@@ -52,6 +63,11 @@
         to = (from == PropertyNotSetBodyLimitAction) ? default : from;       \
     }
 
+#define merge_xmlargparse_value(to, from, default)                               \
+    if (to == PropertyNotSetConfigXMLParseXmlIntoArgs) {                                 \
+        to = (from == PropertyNotSetConfigXMLParseXmlIntoArgs) ? default : from;         \
+    }
+
 #ifdef __cplusplus
 
 namespace modsecurity {
@@ -63,48 +79,161 @@ class Driver;
 using modsecurity::debug_log::DebugLog;
 using modsecurity::audit_log::AuditLog;
 
-/** @ingroup ModSecurity_CPP_API */
-class ConfigInt {
- public:
-    ConfigInt() : m_set(false), m_value(0) { }
-    bool m_set;
-    int m_value;
+// template for different numeric int types
+template <typename T>
+class ConfigValue {
+public:
+    bool m_set = false;
+    T m_value = 0;
 
-    void merge(ConfigInt *from) {
-        if (m_set == true || from->m_set == false) {
+    ConfigValue() = default;
+
+    void merge(const ConfigValue<T>* from) {
+        if (m_set || !from->m_set) {
             return;
         }
         m_set = true;
         m_value = from->m_value;
-        return;
+    }
+
+    // default parser
+    virtual bool parse(const std::string& a, std::string* errmsg = nullptr) {
+
+        // use an alias type because the template can convert both signed and unsigned int
+        using LimitSigned = std::conditional_t<std::is_signed_v<T>, std::int64_t, std::uint64_t>;
+        LimitSigned val;
+
+        // clear errno variable, wee need that later
+        errno = 0;
+
+        try {
+            if constexpr (std::is_signed_v<T>) {
+                val = static_cast<std::int64_t>(std::stoll(a));
+            } else {
+                val = static_cast<std::uint64_t>(std::stoull(a));
+            }
+        }
+        catch (const std::invalid_argument&) {
+            // probably can't occur, but we handle it anyway
+            set_error(errmsg, "Invalid number format (not numeric)");
+            return false;
+        }
+        catch (const std::out_of_range&) {
+            // the value is out of range, we can not handle it
+            set_error(errmsg, "Number out of range");
+            return false;
+        }
+        catch (...) { // NOSONAR
+            // we don't need to handle all exceptions, the engine's BISON parser
+            // does not allow other symbols than numbers
+            set_error(errmsg, "An unknown error occurred while parsing number.");
+            return false;
+        }
+
+        if (
+            // The first condition will be true when the value is bigger than int64/uint64 maximum value.
+            // The second condition checks whether the value fits into int64/uint64, but not
+            // into the designed type, e.g., uint32; in that case the errno will be 0, but
+            // we must check the value is not bigger than the defined maximum of the class.
+            (errno == ERANGE && val == std::numeric_limits<LimitSigned>::max())
+            ||
+            (val > static_cast<LimitSigned>(maxValue()))
+        ) {
+            set_error(errmsg, "Value is too big.");
+            return false;
+        }
+
+        if (
+            // same as above
+            (errno == ERANGE && val == std::numeric_limits<LimitSigned>::min())
+            ||
+            (val < static_cast<LimitSigned>(minValue()))
+        ) {
+            set_error(errmsg, "Value is too small.");
+            return false;
+        }
+
+        m_value = static_cast<T>(val);
+        m_set = true;
+        return true;
+
+    }
+
+protected:
+    // derived classes must implement the maxValue
+    virtual T maxValue() const = 0;
+    // minValue is optional
+    virtual T minValue() const { return 0; }
+
+private:
+    static inline void set_error(std::string* err, const char* msg) {
+        if (err) {
+            *err = msg;
+        }
     }
 };
 
+/** @ingroup ModSecurity_CPP_API */
 
-class ConfigDouble {
+class ConfigInt : public ConfigValue<int32_t> {
+protected:
+    int32_t minValue() const override {
+        return std::numeric_limits<int32_t>::min();
+    }
+    int32_t maxValue() const override {
+        return std::numeric_limits<int32_t>::max();
+    }
+};
+
+class ConfigUnsignedInt : public ConfigValue<uint32_t> {
+protected:
+    uint32_t maxValue() const override {
+        return std::numeric_limits<uint32_t>::max();
+    }
+};
+
+/**
+ * Octal variant for file modes (SecUploadFileMode): "0640" is 0640, not 640.
+ */
+class ConfigOctalInt : public ConfigUnsignedInt {
  public:
-    ConfigDouble() : m_set(false), m_value(0) { }
-    bool m_set;
-    double m_value;
-
-    void merge(ConfigDouble *from) {
-        if (m_set == true || from->m_set == false) {
-            return;
+    bool parse(const std::string& a, std::string* errmsg = nullptr) override {
+        if (a.empty() || a.find_first_not_of("01234567") != std::string::npos) {
+            if (errmsg) {
+                *errmsg = "Invalid octal number";
+            }
+            return false;
         }
-        m_set = true;
-        m_value = from->m_value;
-        return;
+        // Leading zeroes are not significant ("000640" is still 0640).
+        const std::string digits = a.substr(
+            std::min(a.find_first_not_of('0'), a.size() - 1));
+        // 11 octal digits always fit in uint64_t, so stoull cannot throw;
+        // the base class then checks the value against uint32_t.
+        if (digits.size() > 11) {
+            if (errmsg) {
+                *errmsg = "Value is too big.";
+            }
+            return false;
+        }
+        return ConfigUnsignedInt::parse(std::to_string(std::stoull(digits, nullptr, 8)), errmsg);
+    }
+};
+
+class ConfigUnsignedLong : public ConfigValue<uint64_t> {
+protected:
+    uint64_t maxValue() const override {
+        return std::numeric_limits<uint64_t>::max();
     }
 };
 
 
 class ConfigString {
  public:
-    ConfigString() : m_set(false), m_value("") { }
-    bool m_set;
-    std::string m_value;
+    bool m_set = false;
+    std::string m_value = "";
+    ConfigString() = default;
 
-    void merge(ConfigString *from) {
+    void merge(const ConfigString *from) {
         if (m_set == true || from->m_set == false) {
             return;
         }
@@ -117,10 +246,10 @@ class ConfigString {
 
 class ConfigSet {
  public:
-    ConfigSet() : m_set(false), m_clear(false) { }
-    bool m_set;
-    bool m_clear;
+    bool m_set = false;
+    bool m_clear = false;
     std::set<std::string> m_value;
+    ConfigSet() = default;
 };
 
 
@@ -150,7 +279,7 @@ class ConfigUnicodeMap {
     static void loadConfig(std::string f, double codePage,
         RulesSetProperties *driver, std::string *errg);
 
-    void merge(ConfigUnicodeMap *from) {
+    void merge(const ConfigUnicodeMap *from) {
         if (from->m_set == false) {
             return;
         }
@@ -177,6 +306,7 @@ class RulesSetProperties {
         m_secRequestBodyAccess(PropertyNotSetConfigBoolean),
         m_secResponseBodyAccess(PropertyNotSetConfigBoolean),
         m_secXMLExternalEntity(PropertyNotSetConfigBoolean),
+        m_secXMLParseXmlIntoArgs(PropertyNotSetConfigXMLParseXmlIntoArgs),
         m_tmpSaveUploadedFiles(PropertyNotSetConfigBoolean),
         m_uploadKeepFiles(PropertyNotSetConfigBoolean),
         m_debugLog(new DebugLog()),
@@ -191,6 +321,7 @@ class RulesSetProperties {
         m_secRequestBodyAccess(PropertyNotSetConfigBoolean),
         m_secResponseBodyAccess(PropertyNotSetConfigBoolean),
         m_secXMLExternalEntity(PropertyNotSetConfigBoolean),
+        m_secXMLParseXmlIntoArgs(PropertyNotSetConfigXMLParseXmlIntoArgs),
         m_tmpSaveUploadedFiles(PropertyNotSetConfigBoolean),
         m_uploadKeepFiles(PropertyNotSetConfigBoolean),
         m_debugLog(debugLog),
@@ -218,7 +349,8 @@ class RulesSetProperties {
 
     /**
      *
-     *
+     * The ConfigBoolean enumerator defines the states for configuration boolean values.
+     * The default value is PropertyNotSetConfigBoolean.
      */
     enum ConfigBoolean {
         TrueConfigBoolean,
@@ -226,6 +358,18 @@ class RulesSetProperties {
         PropertyNotSetConfigBoolean
     };
 
+    /**
+     *
+     * The ConfigXMLParseXmlIntoArgs enumerator defines the states for the configuration
+     * XMLParseXmlIntoArgs values.
+     * The default value is PropertyNotSetConfigXMLParseXmlIntoArgs.
+     */
+    enum ConfigXMLParseXmlIntoArgs {
+        TrueConfigXMLParseXmlIntoArgs,
+        FalseConfigXMLParseXmlIntoArgs,
+        OnlyArgsConfigXMLParseXmlIntoArgs,
+        PropertyNotSetConfigXMLParseXmlIntoArgs
+    };
 
     /**
      *
@@ -311,7 +455,7 @@ class RulesSetProperties {
     };
 
 
-    static const char *ruleEngineStateString(RuleEngine i) {
+    static std::string ruleEngineStateString(RuleEngine i) {
         switch (i) {
         case DisabledRuleEngine:
             return "Disabled";
@@ -322,7 +466,7 @@ class RulesSetProperties {
         case PropertyNotSetRuleEngine:
             return "PropertyNotSet/DetectionOnly";
         }
-        return NULL;
+        return std::string{};
     }
 
 
@@ -333,11 +477,24 @@ class RulesSetProperties {
         case FalseConfigBoolean:
             return "False";
         case PropertyNotSetConfigBoolean:
+        default:
             return "Not set";
         }
-        return NULL;
     }
 
+    static std::string configXMLParseXmlIntoArgsString(ConfigXMLParseXmlIntoArgs i) {
+        switch (i) {
+        case TrueConfigXMLParseXmlIntoArgs:
+            return "True";
+        case FalseConfigXMLParseXmlIntoArgs:
+            return "False";
+        case OnlyArgsConfigXMLParseXmlIntoArgs:
+            return "OnlyArgs";
+        case PropertyNotSetConfigXMLParseXmlIntoArgs:
+        default:
+            return "Not set";
+        }
+    }
 
     static int mergeProperties(RulesSetProperties *from,
         RulesSetProperties *to, std::ostringstream *err) {
@@ -356,6 +513,10 @@ class RulesSetProperties {
         merge_boolean_value(to->m_secXMLExternalEntity,
                             from->m_secXMLExternalEntity,
                             PropertyNotSetConfigBoolean);
+
+        merge_xmlargparse_value(to->m_secXMLParseXmlIntoArgs,
+                            from->m_secXMLParseXmlIntoArgs,
+                            PropertyNotSetConfigXMLParseXmlIntoArgs);
 
         merge_boolean_value(to->m_uploadKeepFiles,
                             from->m_uploadKeepFiles,
@@ -379,6 +540,7 @@ class RulesSetProperties {
                                     from->m_responseBodyLimitAction,
                                     PropertyNotSetBodyLimitAction);
 
+        to->m_pcreMatchLimit.merge(&from->m_pcreMatchLimit);
         to->m_uploadFileLimit.merge(&from->m_uploadFileLimit);
         to->m_uploadFileMode.merge(&from->m_uploadFileMode);
         to->m_uploadDirectory.merge(&from->m_uploadDirectory);
@@ -463,15 +625,17 @@ class RulesSetProperties {
     ConfigBoolean m_secRequestBodyAccess;
     ConfigBoolean m_secResponseBodyAccess;
     ConfigBoolean m_secXMLExternalEntity;
+    ConfigXMLParseXmlIntoArgs m_secXMLParseXmlIntoArgs;
     ConfigBoolean m_tmpSaveUploadedFiles;
     ConfigBoolean m_uploadKeepFiles;
-    ConfigDouble m_argumentsLimit;
-    ConfigDouble m_requestBodyJsonDepthLimit;
-    ConfigDouble m_requestBodyLimit;
-    ConfigDouble m_requestBodyNoFilesLimit;
-    ConfigDouble m_responseBodyLimit;
-    ConfigInt m_uploadFileLimit;
-    ConfigInt m_uploadFileMode;
+    ConfigUnsignedInt m_argumentsLimit;
+    ConfigUnsignedInt m_requestBodyJsonDepthLimit;
+    ConfigUnsignedLong m_requestBodyLimit;
+    ConfigUnsignedLong m_requestBodyNoFilesLimit;
+    ConfigUnsignedLong m_responseBodyLimit;
+    ConfigUnsignedInt m_pcreMatchLimit;
+    ConfigUnsignedInt m_uploadFileLimit;
+    ConfigOctalInt m_uploadFileMode;
     DebugLog *m_debugLog;
     OnFailedRemoteRulesAction m_remoteRulesActionOnFailed;
     RuleEngine m_secRuleEngine;

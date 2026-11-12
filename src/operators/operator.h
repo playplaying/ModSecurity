@@ -26,6 +26,11 @@
 #include "src/run_time_string.h"
 
 namespace modsecurity {
+namespace Utils {
+class Regex;
+enum class RegexResult;
+}  // namespace Utils
+
 namespace operators {
 
 class Operator {
@@ -115,7 +120,7 @@ class Operator {
     bool evaluateInternal(Transaction *t, RuleWithActions *rule,
         const std::string& a);
     bool evaluateInternal(Transaction *t, RuleWithActions *rule,
-        const std::string& a, std::shared_ptr<RuleMessage> ruleMessage);
+        const std::string& a, RuleMessage &ruleMessage);
 
 
     virtual bool evaluate(Transaction *transaction, const std::string &str);
@@ -124,24 +129,51 @@ class Operator {
         return evaluate(transaction, str);
     }
     virtual bool evaluate(Transaction *transaction, RuleWithActions *rule,
-        const std::string &str, std::shared_ptr<RuleMessage> ruleMessage) {
+        const std::string &str, RuleMessage &ruleMessage) {
         return evaluate(transaction, str);
     }
 
-    static void logOffset(std::shared_ptr<RuleMessage> ruleMessage, int offset, int len) {
-        if (ruleMessage) {
-            ruleMessage->m_reference.append("o"
-                + std::to_string(offset) + ","
-                + std::to_string(len));
+    /**
+     * Upper bound for the reference of a rule message. The reference is
+     * built up across every operator call, target variable and chained rule
+     * of a rule, so without a bound it grows with the input. Once it reaches
+     * this size, further entries are dropped. One entry may cross the limit.
+     */
+    static constexpr size_t MAX_REFERENCE_SIZE = 1024;
+
+    static bool referenceIsFull(const RuleMessage &ruleMessage) {
+        return ruleMessage.m_reference.size() >= MAX_REFERENCE_SIZE;
+    }
+
+    static void appendReference(RuleMessage &ruleMessage,
+        const std::string &entry) {
+        if (referenceIsFull(ruleMessage)) {
+            return;
         }
+        ruleMessage.m_reference.append(entry);
+    }
+
+    static void logOffset(RuleMessage &ruleMessage, int offset, int len) {
+        appendReference(ruleMessage, "o"
+            + std::to_string(offset) + ","
+            + std::to_string(len));
     }
 
     std::string m_match_message;
     bool m_negation;
-    std::string m_op;
+    const std::string m_op;
     std::string m_param;
     std::unique_ptr<RunTimeString> m_string;
     bool m_couldContainsMacro;
+
+ protected:
+    /* Regex error reporting shared by @rx and @rxGlobal: sets the
+     * standalone MSC_PCRE_* variables and the TX:MSC_PCRE_* flags. */
+    static void reportRegexCompileError(Transaction *transaction,
+        const Utils::Regex &re);
+    static void reportRegexSearchError(Transaction *transaction,
+        const Utils::Regex &re, Utils::RegexResult result,
+        const std::string &opName);
 };
 
 }  // namespace operators

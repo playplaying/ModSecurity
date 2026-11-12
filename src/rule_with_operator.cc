@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -55,9 +55,9 @@ RuleWithOperator::RuleWithOperator(Operator *op,
     variables::Variables *_variables,
     std::vector<Action *> *actions,
     Transformations *transformations,
-    std::unique_ptr<std::string> fileName,
+    const std::string &fileName,
     int lineNumber)
-    : RuleWithActions(actions, transformations, std::move(fileName), lineNumber),
+    : RuleWithActions(actions, transformations, fileName, lineNumber),
     m_variables(_variables),
     m_operator(op) { /* */ }
 
@@ -90,18 +90,8 @@ void RuleWithOperator::updateMatchedVars(Transaction *trans, const std::string &
 }
 
 
-void RuleWithOperator::cleanMatchedVars(Transaction *trans) {
-    ms_dbg_a(trans, 9, "Matched vars cleaned.");
-    trans->m_variableMatchedVar.unset();
-    trans->m_variableMatchedVars.unset();
-    trans->m_variableMatchedVarName.unset();
-    trans->m_variableMatchedVarsNames.unset();
-}
-
-
-
 bool RuleWithOperator::executeOperatorAt(Transaction *trans, const std::string &key,
-    const std::string &value, std::shared_ptr<RuleMessage> ruleMessage) {
+    const std::string &value, RuleMessage &ruleMessage) {
 #if MSC_EXEC_CLOCK_ENABLED
     clock_t begin = clock();
     clock_t end;
@@ -130,74 +120,68 @@ bool RuleWithOperator::executeOperatorAt(Transaction *trans, const std::string &
 }
 
 
-void RuleWithOperator::getVariablesExceptions(Transaction *t,
+template<typename MapType, typename Operation>
+void getVariablesExceptionsHelper(
+    variables::Variables *exclusion, variables::Variables *addition,
+    const MapType &map, Operation op) {
+    for (const auto &[x, v] : map) {
+        if (op(x)) {
+            auto b = v.get();
+            if (auto vme = dynamic_cast<variables::VariableModificatorExclusion*>(b)) {
+                exclusion->push_back(vme->m_base.get());
+            } else {
+                addition->push_back(b);
+            }
+        }
+    }
+}
+
+
+void RuleWithOperator::getVariablesExceptions(Transaction &t,
     variables::Variables *exclusion, variables::Variables *addition) {
-    for (auto &a : t->m_rules->m_exceptions.m_variable_update_target_by_tag) {
-        if (containsTag(*a.first.get(), t) == false) {
-            continue;
-        }
-        Variable *b = a.second.get();
-        if (dynamic_cast<variables::VariableModificatorExclusion*>(b)) {
-            exclusion->push_back(
-                dynamic_cast<variables::VariableModificatorExclusion*>(
-                    b)->m_base.get());
-        } else {
-            addition->push_back(b);
-        }
-    }
+    getVariablesExceptionsHelper(exclusion, addition,
+        t.m_rules->m_exceptions.m_variable_update_target_by_tag, 
+        [this, &t](const auto &tag) { return containsTag(*tag.get(), &t); });
 
-    for (auto &a : t->m_rules->m_exceptions.m_variable_update_target_by_msg) {
-        if (containsMsg(*a.first.get(), t) == false) {
-            continue;
-        }
-        Variable *b = a.second.get();
-        if (dynamic_cast<variables::VariableModificatorExclusion*>(b)) {
-            exclusion->push_back(
-                dynamic_cast<variables::VariableModificatorExclusion*>(
-                    b)->m_base.get());
-        } else {
-            addition->push_back(b);
-        }
-    }
+    getVariablesExceptionsHelper(exclusion, addition,
+        t.m_rules->m_exceptions.m_variable_update_target_by_msg,
+        [this, &t](const auto &msg) { return containsMsg(*msg.get(), &t); });
 
-    for (auto &a : t->m_rules->m_exceptions.m_variable_update_target_by_id) {
-        if (m_ruleId != a.first) {
-            continue;
-        }
-        Variable *b = a.second.get();
-        if (dynamic_cast<variables::VariableModificatorExclusion*>(b)) {
-            exclusion->push_back(
-                dynamic_cast<variables::VariableModificatorExclusion*>(
-                    b)->m_base.get());
-        } else {
-            addition->push_back(b);
-        }
-    }
+    getVariablesExceptionsHelper(exclusion, addition,
+        t.m_rules->m_exceptions.m_variable_update_target_by_id,
+        [this](const auto &id) { return m_ruleId == id; });
 }
 
 
 inline void RuleWithOperator::getFinalVars(variables::Variables *vars,
     variables::Variables *exclusion, Transaction *trans) {
     variables::Variables addition;
-    getVariablesExceptions(trans, exclusion, &addition);
+    getVariablesExceptions(*trans, exclusion, &addition); // cppcheck-suppress ctunullpointer
 
-    for (int i = 0; i < m_variables->size(); i++) {
+    for (std::size_t i = 0; i < m_variables->size(); i++) {
         Variable *variable = m_variables->at(i);
         if (exclusion->contains(variable)) {
             continue;
         }
         if (std::find_if(trans->m_ruleRemoveTargetById.begin(),
                 trans->m_ruleRemoveTargetById.end(),
-                [&, variable, this](std::pair<int, std::string> &m) -> bool {
-                    return m.first == m_ruleId
-                        && m.second == *variable->m_fullName.get();
+                [&, variable, this](const auto &m) -> bool {
+                    const auto& str1 = m.second;
+                    const auto& str2 = *variable->m_fullName.get();
+                    return m.first == m_ruleId &&
+                           str1.size() == str2.size() &&
+                           std::equal(str1.begin(), str1.end(), str2.begin(),
+                                      [](char a, char b) {
+                                          return std::tolower(static_cast<unsigned char>(a)) ==
+                                                 std::tolower(static_cast<unsigned char>(b));
+                                      }); // end-of std::equal
                 }) != trans->m_ruleRemoveTargetById.end()) {
             continue;
         }
         if (std::find_if(trans->m_ruleRemoveTargetByTag.begin(),
                     trans->m_ruleRemoveTargetByTag.end(),
                     [&, variable, trans, this](
-                        std::pair<std::string, std::string> &m) -> bool {
+                        const auto &m) -> bool {
                         return containsTag(m.first, trans)
                             && m.second == *variable->m_fullName.get();
                     }) != trans->m_ruleRemoveTargetByTag.end()) {
@@ -206,17 +190,15 @@ inline void RuleWithOperator::getFinalVars(variables::Variables *vars,
         vars->push_back(variable);
     }
 
-    for (int i = 0; i < addition.size(); i++) {
-        Variable *variable = addition.at(i);
+    for (auto *variable : addition) {
         vars->push_back(variable);
     }
 }
 
 
 bool RuleWithOperator::evaluate(Transaction *trans,
-    std::shared_ptr<RuleMessage> ruleMessage) {
+    RuleMessage &ruleMessage) {
     bool globalRet = false;
-    variables::Variables *variables = this->m_variables;
     bool recursiveGlobalRet;
     bool containsBlock = hasBlockAction();
     std::string eparam;
@@ -228,7 +210,7 @@ bool RuleWithOperator::evaluate(Transaction *trans,
 
 
     // FIXME: Make a class runTimeException to handle this cases.
-    for (auto &i : trans->m_ruleRemoveById) {
+    for (const auto &i : trans->m_ruleRemoveById) {
         if (m_ruleId != i) {
             continue;
         }
@@ -236,7 +218,7 @@ bool RuleWithOperator::evaluate(Transaction *trans,
             " was skipped due to a ruleRemoveById action...");
         return true;
     }
-    for (auto &i : trans->m_ruleRemoveByIdRange) {
+    for (const auto &i : trans->m_ruleRemoveByIdRange) {
         if (!(i.first <= m_ruleId && i.second >= m_ruleId)) {
             continue;
         }
@@ -259,12 +241,12 @@ bool RuleWithOperator::evaluate(Transaction *trans,
         + "\" with param " \
         + eparam \
         + " against " \
-        + variables + ".");
+        + m_variables + ".");
     } else {
         ms_dbg_a(trans, 4, "(Rule: " + std::to_string(m_ruleId) \
             + ") Executing operator \"" + getOperatorName() \
             + " against " \
-            + variables + ".");
+            + m_variables + ".");
     }
 
 
@@ -283,23 +265,23 @@ bool RuleWithOperator::evaluate(Transaction *trans,
             if (exclusion.contains(v) ||
                 std::find_if(trans->m_ruleRemoveTargetById.begin(),
                     trans->m_ruleRemoveTargetById.end(),
-                    [&, v, this](std::pair<int, std::string> &m) -> bool {
+                    [&, v, this](const auto &m) -> bool {
                         return m.first == m_ruleId && m.second == v->getKeyWithCollection();
                     }) != trans->m_ruleRemoveTargetById.end()
             ) {
                 delete v;
-                v = NULL;
+                v = nullptr;
                 continue;
             }
             if (exclusion.contains(v) ||
                 std::find_if(trans->m_ruleRemoveTargetByTag.begin(),
                     trans->m_ruleRemoveTargetByTag.end(),
-                    [&, v, trans, this](std::pair<std::string, std::string> &m) -> bool {
+                    [&, v, trans, this](const auto &m) -> bool {
                         return containsTag(m.first, trans) && m.second == v->getKeyWithCollection();
                     }) != trans->m_ruleRemoveTargetByTag.end()
             ) {
                 delete v;
-                v = NULL;
+                v = nullptr;
                 continue;
             }
 
@@ -308,19 +290,20 @@ bool RuleWithOperator::evaluate(Transaction *trans,
             executeTransformations(trans, value, values);
 
             for (const auto &valueTemp : values) {
-                bool ret;
-                std::string valueAfterTrans = std::move(*valueTemp.first);
+                const auto &valueAfterTrans = valueTemp.first;
 
-                ret = executeOperatorAt(trans, key, valueAfterTrans, ruleMessage);
+                const bool ret = executeOperatorAt(trans, key, valueAfterTrans, ruleMessage);
 
                 if (ret == true) {
-                    ruleMessage->m_match = m_operator->resolveMatchMessage(trans,
+                    ruleMessage.m_match = m_operator->resolveMatchMessage(trans,
                         key, value);
-                    for (auto &i : v->getOrigin()) {
-                        ruleMessage->m_reference.append(i->toText());
+                    for (const auto &i : v->getOrigin()) {
+                        operators::Operator::appendReference(ruleMessage,
+                            i.toText());
                     }
 
-                    ruleMessage->m_reference.append(*valueTemp.second);
+                    operators::Operator::appendReference(ruleMessage,
+                        *valueTemp.second);
                     updateMatchedVars(trans, key, valueAfterTrans);
                     executeActionsIndependentOfChainedRuleResult(trans,
                         &containsBlock, ruleMessage);
@@ -339,7 +322,6 @@ bool RuleWithOperator::evaluate(Transaction *trans,
 
     if (globalRet == false) {
         ms_dbg_a(trans, 4, "Rule returned 0.");
-        cleanMatchedVars(trans);
         goto end_clean;
     }
     ms_dbg_a(trans, 4, "Rule returned 1.");
@@ -374,7 +356,7 @@ end_exec:
 }
 
 
-std::string RuleWithOperator::getOperatorName() const { return m_operator->m_op; }
+const std::string& RuleWithOperator::getOperatorName() const { return m_operator->m_op; }
 
 
 }  // namespace modsecurity

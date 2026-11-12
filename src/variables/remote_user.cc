@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -39,50 +39,45 @@ namespace variables {
 void RemoteUser::evaluate(Transaction *transaction,
     RuleWithActions *rule,
     std::vector<const VariableValue *> *l) {
-    size_t pos;
-    std::string base64;
-    VariableValue *var;
-    std::string header;
+    std::vector<const VariableValue *> l2;
 
-    std::vector<const VariableValue *> *l2 = \
-	new std::vector<const VariableValue *>();
-    transaction->m_variableRequestHeaders.resolve("authorization", l2);
-
-    if (l2->size() < 1) {
-        goto clear;
+    transaction->m_variableRequestHeaders.resolve("authorization", &l2);
+    std::vector<std::unique_ptr<const VariableValue>> l2Owners;
+    l2Owners.reserve(l2.size());
+    for (const auto &a : l2) {
+        l2Owners.emplace_back(a);
     }
 
-    header = std::string(l2->at(0)->getValue());
+    if (!l2.empty()) {
+        const auto *v = l2[0];
 
-    if (header.compare(0, 6, "Basic ") == 0) {
-        base64 = std::string(header, 6, header.length());
+        const auto &header = v->getValue();
+
+        std::string base64;
+
+        if (header.compare(0, 6, "Basic ") == 0) {
+            base64 = std::string(header, 6, header.length());
+        }
+
+        std::string decodedAuthorization;
+        if (!Utils::Base64::decode(base64, &decodedAuthorization)) {
+            return;
+        }
+
+        if (const auto pos{decodedAuthorization.find(":")}; pos != std::string::npos) {
+            transaction->m_variableRemoteUser.assign(std::string(decodedAuthorization, 0, pos));
+
+            auto var = std::make_unique<VariableValue>(&v->getKeyWithCollection(),
+                &transaction->m_variableRemoteUser);
+
+            var->reserveOrigin(v->getOrigin().size());
+            for (const auto &i : v->getOrigin()) {
+                var->addOrigin(i);
+            }
+            l->push_back(var.release());
+        }
+
     }
-
-    base64 = Utils::Base64::decode(base64);
-
-    pos = base64.find(":");
-    if (pos == std::string::npos) {
-        goto clear;
-    }
-    transaction->m_variableRemoteUser.assign(std::string(base64, 0, pos));
-
-    var = new VariableValue(&l2->at(0)->getKeyWithCollection(),
-        &transaction->m_variableRemoteUser);
-
-    for (auto &i : l2->at(0)->getOrigin()) {
-        std::unique_ptr<VariableOrigin> origin(new VariableOrigin());
-        origin->m_offset = i->m_offset;
-        origin->m_length = i->m_length;
-        var->addOrigin(std::move(origin));
-    }
-    l->push_back(var);
-
-clear:
-    for (auto &a : *l2) {
-        delete a;
-    }
-    l2->clear();
-    delete l2;
 }
 
 

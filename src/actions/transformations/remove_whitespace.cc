@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -13,55 +13,27 @@
  *
  */
 
-#include "src/actions/transformations/remove_whitespace.h"
+#include "remove_whitespace.h"
 
-#include <iostream>
-#include <string>
-#include <algorithm>
-#include <functional>
-#include <cctype>
-#include <locale>
+#include "remove_nulls.h"
 
-#include "modsecurity/transaction.h"
-#include "src/actions/transformations/transformation.h"
+namespace modsecurity::actions::transformations {
 
 
-namespace modsecurity {
-namespace actions {
-namespace transformations {
-
-RemoveWhitespace::RemoveWhitespace(const std::string &action) 
-    : Transformation(action) {
-    this->action_kind = 1;
-}
-
-std::string RemoveWhitespace::evaluate(const std::string &val,
-    Transaction *transaction) {
-    std::string value(val);
-
-    int64_t i = 0;
+bool RemoveWhitespace::transform(std::string &value, const Transaction *trans) const {
     const char nonBreakingSpaces = 0xa0;
     const char nonBreakingSpaces2 = 0xc2;
 
-    // loop through all the chars
-    while (i < value.size()) {
+    auto pred = [](const auto c) {
         // remove whitespaces and non breaking spaces (NBSP)
-        if (std::isspace(static_cast<unsigned char>(value[i]))
-            || (value[i] == nonBreakingSpaces)
-            || value[i] == nonBreakingSpaces2) {
-            value.erase(i, 1);
-        } else {
-          /* if the space is not a whitespace char, increment counter
-           counter should not be incremented if a character is erased because
-           the index erased will be replaced by the following character */
-          i++;
-        }
-    }
+        return std::isspace(static_cast<unsigned char>(c))
+            || c == nonBreakingSpaces
+            || c == nonBreakingSpaces2;
+    };
 
-    return value;
+    return RemoveNulls::remove_if(value, pred);
 }
 
-}  // namespace transformations
-}  // namespace actions
-}  // namespace modsecurity
+
+}  // namespace modsecurity::actions::transformations
 

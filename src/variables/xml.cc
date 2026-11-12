@@ -79,7 +79,7 @@ void XML::evaluate(Transaction *t,
     }
 
     /* Process the XPath expression. */
-    xpathExpr = (const xmlChar*)param.c_str();
+    xpathExpr = reinterpret_cast<const xmlChar*>(param.c_str());
     xpathCtx = xmlXPathNewContext(t->m_xml->m_data.doc);
     if (xpathCtx == NULL) {
         ms_dbg_a(t, 1, "XML: Unable to create new XPath context. : ");
@@ -91,9 +91,9 @@ void XML::evaluate(Transaction *t,
     } else {
         std::vector<actions::Action *> acts = rule->getActionsByName("xmlns", t);
         for (auto &x : acts) {
-            actions::XmlNS *z = (actions::XmlNS *)x;
-            if (xmlXPathRegisterNs(xpathCtx, (const xmlChar*)z->m_scope.c_str(),
-                    (const xmlChar*)z->m_href.c_str()) != 0) {
+            actions::XmlNS *z = static_cast<actions::XmlNS *>(x);
+            if (xmlXPathRegisterNs(xpathCtx, reinterpret_cast<const xmlChar*>(z->m_scope.c_str()),
+                    reinterpret_cast<const xmlChar*>(z->m_href.c_str())) != 0) {
                 ms_dbg_a(t, 1, "Failed to register XML namespace href \"" + \
                     z->m_href + "\" prefix \"" + z->m_scope + "\".");
                 return;
@@ -124,13 +124,12 @@ void XML::evaluate(Transaction *t,
         content = reinterpret_cast<char *>(
             xmlNodeGetContent(nodes->nodeTab[i]));
         if (content != NULL) {
-            std::string *a = new std::string(content);
+            auto a = std::string(content);
             VariableValue *var = new VariableValue(m_fullName.get(),
-                a);
+                &a);
             if (!m_keyExclusion.toOmit(*m_fullName)) {
                 l->push_back(var);
             }
-            delete a;
             xmlFree(content);
          }
     }

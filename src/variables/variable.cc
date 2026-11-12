@@ -1,6 +1,6 @@
 /*
  * ModSecurity, http://www.modsecurity.org/
- * Copyright (c) 2015 - 2021 Trustwave Holdings, Inc. (http://www.trustwave.com/)
+ * Copyright (c) 2015 - 2023 Trustwave Holdings, Inc. (http://www.trustwave.com/)
  *
  * You may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -48,23 +48,23 @@ Variable::Variable(const std::string &name)
 }
 
 
-Variable::Variable(Variable *var) :
+Variable::Variable(const Variable *var) :
     m_name(var->m_name),
     m_collectionName(var->m_collectionName),
     m_fullName(var->m_fullName) { }
 
 
-void Variable::addsKeyExclusion(Variable *v) {
+void Variable::addsKeyExclusion(const Variable *v) {
     std::unique_ptr<KeyExclusion> r;
-    VariableModificatorExclusion *ve = \
-        dynamic_cast<VariableModificatorExclusion *>(v);
-    VariableRegex *vr;
+    const auto *ve = \
+        dynamic_cast<const VariableModificatorExclusion *>(v);
+    const VariableRegex *vr;
 
     if (!ve) {
         return;
     }
 
-    vr = dynamic_cast<VariableRegex *>(ve->m_base.get());
+    vr = dynamic_cast<const VariableRegex *>(ve->m_base.get());
 
     if (vr == NULL) {
         r.reset(new KeyExclusionString(v->m_name));
@@ -76,14 +76,14 @@ void Variable::addsKeyExclusion(Variable *v) {
 }
 
 
-std::string operator+(const std::string &a, Variable *v) {
+std::string operator+(const std::string &a, const Variable *v) {
     return a + *v->m_fullName.get();
 }
 
 
-std::string operator+(const std::string &a, Variables *v) {
+std::string operator+(const std::string &a, const Variables *v) {
     std::string test;
-    for (auto &b : *v) {
+    for (const auto &b : *v) {
         if (test.empty()) {
             test = std::string("") + b;
         } else {

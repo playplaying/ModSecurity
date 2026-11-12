@@ -21,6 +21,7 @@
 #include <string>
 #include <iostream>
 #include <iterator>
+#include <memory>
 
 #include "test/common/colors.h"
 #include "src/utils/regex.h"
@@ -29,20 +30,6 @@
 
 namespace modsecurity_test {
 
-
-std::string string_to_hex(const std::string& input) {
-    static const char* const lut = "0123456789ABCDEF";
-    size_t len = input.length();
-
-    std::string output;
-    output.reserve(2 * len);
-    for (size_t i = 0; i < len; ++i) {
-        const unsigned char c = input[i];
-        output.push_back(lut[c >> 4]);
-        output.push_back(lut[c & 15]);
-    }
-    return output;
-}
 
 void replaceAll(std::string *s, const std::string &search,
     const char replace) {
@@ -89,7 +76,7 @@ void json2bin(std::string *str) {
 }
 
 
-std::string UnitTest::print() {
+std::string UnitTest::print() const {
     std::stringstream i;
 
     i << KRED << "Test failed." << RESET;
@@ -102,15 +89,15 @@ std::string UnitTest::print() {
     i << "  \"param\": \"" << this->param << "\"" << std::endl;
     i << "  \"output\": \"" << this->output << "\"" << std::endl;
     i << "}" << std::endl;
-    if (this->ret != this->obtained) {
+    if (this->ret != this->result.ret) {
         i << "Expecting: \"" << this->ret << "\" - returned: \"";
-        i << this->obtained << "\"" << std::endl;
+        i << this->result.ret << "\"" << std::endl;
     }
-    if (this->output != this->obtainedOutput) {
+    if (this->output != this->result.output) {
         i << "Expecting: \"";
         i << modsecurity::utils::string::toHexIfNeeded(this->output);
         i << "\" - returned: \"";
-        i << modsecurity::utils::string::toHexIfNeeded(this->obtainedOutput);
+        i << modsecurity::utils::string::toHexIfNeeded(this->result.output);
         i << "\"";
         i << std::endl;
     }
@@ -119,15 +106,17 @@ std::string UnitTest::print() {
 }
 
 
-UnitTest *UnitTest::from_yajl_node(const yajl_val &node) {
+std::unique_ptr<UnitTest> UnitTest::from_yajl_node(const yajl_val &node) {
     size_t num_tests = node->u.object.len;
-    UnitTest *u = new UnitTest();
+    auto u = std::make_unique<UnitTest>();
+
+    u->skipped = false;
+    u->capture = 0;
 
     for (int i = 0; i < num_tests; i++) {
         const char *key = node->u.object.keys[ i ];
         yajl_val val = node->u.object.values[ i ];
 
-        u->skipped = false;
         if (strcmp(key, "param") == 0) {
            u->param = YAJL_GET_STRING(val);
         } else if (strcmp(key, "input") == 0) {
@@ -141,6 +130,10 @@ UnitTest *UnitTest::from_yajl_node(const yajl_val &node) {
            u->type = YAJL_GET_STRING(val);
         } else if (strcmp(key, "ret") == 0) {
            u->ret = YAJL_GET_INTEGER(val);
+        } else if (strcmp(key, "capture") == 0) {
+           u->capture = YAJL_GET_INTEGER(val);
+        } else if (strcmp(key, "libinjection_override") == 0) {
+           u->libinjection_override = YAJL_GET_STRING(val);
         } else if (strcmp(key, "output") == 0) {
            u->output = std::string(YAJL_GET_STRING(val));
            json2bin(&u->output);

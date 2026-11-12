@@ -13,13 +13,19 @@
  *
  */
 
-#include <unistd.h>
+#ifndef EXAMPLES_READING_LOGS_VIA_RULE_MESSAGE_READING_LOGS_VIA_RULE_MESSAGE_H_
+#define EXAMPLES_READING_LOGS_VIA_RULE_MESSAGE_READING_LOGS_VIA_RULE_MESSAGE_H_
 
 #include <string>
 #include <memory>
+#include <thread>
+#include <array>
+#include <chrono>
+
+#include "modsecurity/rule_message.h"
 
 
-#define NUM_THREADS 100
+constexpr auto NUM_THREADS = 100;
 
 
 char request_header[] =  "" \
@@ -61,35 +67,21 @@ char response_body[] = "" \
 
 char ip[] = "200.249.12.31";
 
-#include "modsecurity/rule_message.h"
 
-#ifndef EXAMPLES_READING_LOGS_VIA_RULE_MESSAGE_READING_LOGS_VIA_RULE_MESSAGE_H_
-#define EXAMPLES_READING_LOGS_VIA_RULE_MESSAGE_READING_LOGS_VIA_RULE_MESSAGE_H_
+static void process_request(modsecurity::ModSecurity *modsec, modsecurity::RulesSet *rules) {
+    for (auto z = 0; z < 10000; z++) {
+        auto modsecTransaction = std::make_unique<modsecurity::Transaction>(modsec, rules, nullptr);
 
-
-struct data_ms {
-    modsecurity::ModSecurity *modsec;
-    modsecurity::RulesSet *rules;
-};
-
-
-static void *process_request(void *data) {
-    struct data_ms *a = (struct data_ms *)data;
-    modsecurity::ModSecurity *modsec = a->modsec;
-    modsecurity::RulesSet *rules = a->rules;
-    int z = 0;
-
-    for (z = 0; z < 10000; z++) {
-        modsecurity::Transaction *modsecTransaction = \
-            new modsecurity::Transaction(modsec, rules, NULL);
         modsecTransaction->processConnection(ip, 12345, "127.0.0.1", 80);
         modsecTransaction->processURI(request_uri, "GET", "1.1");
 
-        usleep(10);
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+
         modsecTransaction->addRequestHeader("Host",
             "net.tutsplus.com");
         modsecTransaction->processRequestHeaders();
         modsecTransaction->processRequestBody();
+
         modsecTransaction->addResponseHeader("HTTP/1.1",
             "200 OK");
         modsecTransaction->processResponseHeaders(200, "HTTP 1.2");
@@ -97,75 +89,59 @@ static void *process_request(void *data) {
             (const unsigned char*)response_body,
             strlen((const char*)response_body));
         modsecTransaction->processResponseBody();
+
         modsecTransaction->processLogging();
-
-        delete modsecTransaction;
     }
-
-    pthread_exit(NULL);
-    return NULL;
 }
-
 
 class ReadingLogsViaRuleMessage {
  public:
-    ReadingLogsViaRuleMessage(char *request_header,
-        char *request_uri,
-        char *request_body,
-        char *response_headers,
-        char *response_body,
-        char *ip,
-        const std::string &rules) :
-            m_request_header(request_header),
-            m_request_uri(request_uri),
-            m_request_body(request_body),
-            m_response_headers(response_headers),
-            m_response_body(response_body),
-            m_ip(ip),
-            m_rules(rules)
+    ReadingLogsViaRuleMessage(char *arg_request_header,
+        char *arg_request_uri,
+        char *arg_request_body,
+        char *arg_response_headers,
+        char *arg_response_body,
+        char *arg_ip,
+        const std::string &arg_rules) :
+            m_request_header(arg_request_header),
+            m_request_uri(arg_request_uri),
+            m_request_body(arg_request_body),
+            m_response_headers(arg_response_headers),
+            m_response_body(arg_response_body),
+            m_ip(arg_ip),
+            m_rules(arg_rules)
         { }
 
-    int process() {
-        pthread_t threads[NUM_THREADS];
-        int i;
-        struct data_ms dms;
-        void *status;
-
-        modsecurity::ModSecurity *modsec;
-        modsecurity::RulesSet *rules;
-
-        modsec = new modsecurity::ModSecurity();
+    int process() const {
+        auto modsec = std::make_unique<modsecurity::ModSecurity>();
         modsec->setConnectorInformation("ModSecurity-test v0.0.1-alpha" \
             " (ModSecurity test)");
         modsec->setServerLogCb(logCb, modsecurity::RuleMessageLogProperty
             | modsecurity::IncludeFullHighlightLogProperty);
 
-        rules = new modsecurity::RulesSet();
+        auto rules = std::make_unique<modsecurity::RulesSet>();
         if (rules->loadFromUri(m_rules.c_str()) < 0) {
             std::cout << "Problems loading the rules..." << std::endl;
             std::cout << rules->m_parserError.str() << std::endl;
             return -1;
         }
 
-        dms.modsec = modsec;
-        dms.rules = rules;
+        std::array<std::thread, NUM_THREADS> threads;
 
-        for (i = 0; i < NUM_THREADS; i++) {
-            pthread_create(&threads[i], NULL, process_request,
-		reinterpret_cast<void *>(&dms));
-            //  process_request((void *)&dms);
+        for (auto i = 0; i != threads.size(); ++i) {
+            threads[i] = std::thread(
+                [&modsec, &rules]() {
+                    process_request(modsec.get(), rules.get());
+                });
         }
 
-        usleep(10000);
+        std::this_thread::sleep_for(std::chrono::microseconds(10000));
 
-        for (i=0; i < NUM_THREADS; i++) {
-            pthread_join(threads[i], &status);
+        for (auto i = 0; i != threads.size(); ++i) {
+            threads[i].join();
             std::cout << "Main: completed thread id :" << i << std::endl;
         }
 
-        delete rules;
-        delete modsec;
-        pthread_exit(NULL);
         return 0;
     }
 
@@ -179,18 +155,18 @@ class ReadingLogsViaRuleMessage {
         const modsecurity::RuleMessage *ruleMessage = \
             reinterpret_cast<const modsecurity::RuleMessage *>(ruleMessagev);
 
-        std::cout << "Rule Id: " << std::to_string(ruleMessage->m_ruleId);
-        std::cout << " phase: " << std::to_string(ruleMessage->m_phase);
+        std::cout << "Rule Id: " << std::to_string(ruleMessage->m_rule.m_ruleId);
+        std::cout << " phase: " << std::to_string(ruleMessage->getPhase());
         std::cout << std::endl;
         if (ruleMessage->m_isDisruptive) {
             std::cout << " * Disruptive action: ";
-            std::cout << modsecurity::RuleMessage::log(ruleMessage);
+            std::cout << modsecurity::RuleMessage::log(*ruleMessage);
             std::cout << std::endl;
             std::cout << " ** %d is meant to be informed by the webserver.";
             std::cout << std::endl;
         } else {
             std::cout << " * Match, but no disruptive action: ";
-            std::cout << modsecurity::RuleMessage::log(ruleMessage);
+            std::cout << modsecurity::RuleMessage::log(*ruleMessage);
             std::cout << std::endl;
         }
     }

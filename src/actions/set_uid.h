@@ -36,11 +36,10 @@ class SetUID : public Action {
         : Action(_action) { }
 
     explicit SetUID(std::unique_ptr<RunTimeString> z)
-        : Action("setuid", RunTimeOnlyIfMatchKind),
+        : Action("setuid"),
             m_string(std::move(z)) { }
 
     bool evaluate(RuleWithActions *rule, Transaction *transaction) override;
-    bool init(std::string *error) override;
 
  private:
     std::unique_ptr<RunTimeString> m_string;

@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <cstdint>
 #endif
 
 
@@ -74,10 +75,13 @@ class RulesSet : public RulesSetProperties {
     int merge(RulesSet *rules);
 
     int evaluate(int phase, Transaction *transaction);
+    std::string getParserError() const;
     std::string getParserError();
 
     void debug(int level, const std::string &id, const std::string &uri,
         const std::string &msg);
+
+    static void cleanMatchedVars(Transaction *trans);
 
     RulesSetPhases m_rulesSetPhases;
  private:
@@ -93,12 +97,13 @@ extern "C" {
 #endif
 
 RulesSet *msc_create_rules_set(void);
-void msc_rules_dump(RulesSet *rules);
+void msc_rules_dump(const RulesSet *rules);
 int msc_rules_merge(RulesSet *rules_dst, RulesSet *rules_from, const char **error);
 int msc_rules_add_remote(RulesSet *rules, const char *key, const char *uri,
     const char **error);
 int msc_rules_add_file(RulesSet *rules, const char *file, const char **error);
 int msc_rules_add(RulesSet *rules, const char *plain_rules, const char **error);
+void msc_rules_error_cleanup(const char *error);
 int msc_rules_cleanup(RulesSet *rules);
 
 #ifdef __cplusplus

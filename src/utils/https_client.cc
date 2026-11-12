@@ -20,10 +20,14 @@
 #include <curl/curl.h>
 #endif
 
+#ifndef WIN32
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#else
+#include <WinSock2.h>
+#endif
 #include <string>
 
 #include <fstream>
@@ -87,12 +91,17 @@ bool HttpsClient::download(const std::string &uri) {
         headers_chunk = curl_slist_append(headers_chunk, m_key.c_str());
     }
 
-    /* Make it TLS 1.x only. */
-    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1);
+    /* Make it TLS 1.2 at least. */
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
 
     /* those are the default options, but lets make sure */
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+
+#ifdef WIN32
+    /* use the operating system's native CA store for certificate verification.*/
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
 
     /* send all data to this function  */
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &HttpsClient::handle);
@@ -101,14 +110,17 @@ bool HttpsClient::download(const std::string &uri) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);
 
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "ModSecurity3");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers_chunk);
 
     /* We want Curl to return error in case there is an HTTP error code */
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
 
     if (m_requestBody.empty() == false) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, m_requestBody.c_str());
+        headers_chunk = curl_slist_append(headers_chunk, "Expect:"); // Disable Expect: 100-continue
     }
+
+    /* set HTTP headers for request */
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers_chunk);
 
     res = curl_easy_perform(curl);
 

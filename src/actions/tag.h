@@ -33,13 +33,12 @@ namespace actions {
 class Tag : public Action {
  public:
     explicit Tag(std::unique_ptr<RunTimeString> z)
-        : Action("tag", RunTimeOnlyIfMatchKind),
+        : Action("tag"),
         m_string(std::move(z)) { }
 
     std::string getName(Transaction *transaction);
 
-    bool evaluate(RuleWithActions *rule, Transaction *transaction,
-        std::shared_ptr<RuleMessage> rm) override;
+    bool evaluate(RuleWithActions *rule, Transaction *transaction, RuleMessage &ruleMessage) override;
 
  protected:
     std::unique_ptr<RunTimeString> m_string;

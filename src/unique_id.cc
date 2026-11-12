@@ -17,7 +17,8 @@
 #include "src/config.h"
 
 #ifdef WIN32
-#include <winsock2.h>
+#include "src/compat/msvc.h"
+#include <WinSock2.h>
 #include <iphlpapi.h>
 #endif
 
@@ -48,8 +49,13 @@
 #endif
 
 #include <stdio.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#include <io.h>
+#endif
 #include <string.h>
+#include <utility>
 
 #include "src/utils/sha1.h"
 
@@ -67,7 +73,12 @@ void UniqueId::fillUniqueId() {
 
     data = macAddress + name;
 
-    this->uniqueId_str = Utils::Sha1::hexdigest(data);
+    std::string uniqueIdHex;
+    if (Utils::Sha1::hexdigest(data, &uniqueIdHex)) {
+        this->uniqueId_str = std::move(uniqueIdHex);
+    } else {
+        this->uniqueId_str.clear();
+    }
 }
 
 // Based on:
@@ -129,7 +140,7 @@ std::string UniqueId::ethernetMacAddress() {
                 (unsigned char)LLADDR(sdl)[3],
                 (unsigned char)LLADDR(sdl)[4],
                 (unsigned char)LLADDR(sdl)[5]);
-            goto end;
+            break;
         }
     }
 
@@ -172,7 +183,7 @@ std::string UniqueId::ethernetMacAddress() {
                 (unsigned char)ifr->ifr_addr.sa_data[4],
                 (unsigned char)ifr->ifr_addr.sa_data[5]);
 
-            goto end;
+            break;
         }
     }
     close(sock);
@@ -207,14 +218,14 @@ std::string UniqueId::ethernetMacAddress() {
     pAdapter = pAdapterInfo;
     while (pAdapter && !mac[0] && !mac[1] && !mac[2]) {
         if (pAdapter->AddressLength > 4) {
-            apr_snprintf(mac, MAC_ADDRESS_SIZE, "%02x:%02x:%02x:%02x:%02x:%02x",
+            snprintf(mac, MAC_ADDRESS_SIZE, "%02x:%02x:%02x:%02x:%02x:%02x",
                 (unsigned char)pAdapter->Address[0],
                 (unsigned char)pAdapter->Address[1],
                 (unsigned char)pAdapter->Address[2],
                 (unsigned char)pAdapter->Address[3],
                 (unsigned char)pAdapter->Address[4],
                 (unsigned char)pAdapter->Address[5]);
-            goto end;
+            break;
         }
         pAdapter = pAdapter->Next;
     }
@@ -222,12 +233,9 @@ std::string UniqueId::ethernetMacAddress() {
     free(pAdapterInfo);
 #endif
 
-#if defined(__linux__) || defined(__gnu_linux__) || defined(DARWIN) || defined(WIN32)
-end:
-#endif
     return std::string(reinterpret_cast<const char *>(mac));
 #if defined(__linux__) || defined(__gnu_linux__) || defined(DARWIN) || defined(WIN32)
-failed:
+failed:  // cppcheck-suppress unusedLabelConfiguration
     return std::string("");
 #endif
 }

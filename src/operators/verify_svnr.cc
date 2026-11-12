@@ -24,7 +24,7 @@ int VerifySVNR::convert_to_int(const char c) {
 }
 
 
-bool VerifySVNR::verify(const char *svnrnumber, int len) {
+bool VerifySVNR::verify(const char *svnrnumber, int len) const {
     int var_len = len;
     int sum = 0;
     unsigned int i = 0, svnr_len = 10;
@@ -78,16 +78,15 @@ bool VerifySVNR::verify(const char *svnrnumber, int len) {
 
 
 bool VerifySVNR::evaluate(Transaction *t, RuleWithActions *rule,
-    const std::string& input, std::shared_ptr<RuleMessage> ruleMessage) {
+    const std::string& input, RuleMessage &ruleMessage) {
     std::list<SMatch> matches;
     bool is_svnr = false;
-    int i;
 
     if (m_param.empty()) {
         return is_svnr;
     }
 
-    for (i = 0; i < input.size() - 1 && is_svnr == false; i++) {
+    for (size_t i = 0; i + 1 < input.size() && !is_svnr; i++) {
         matches = m_re->searchAll(input.substr(i, input.size()));
 
         for (const auto & j : matches) {
